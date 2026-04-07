@@ -53,10 +53,16 @@ class ScanRequest(BaseModel):
     full_scan: bool = False
     port_range: str = "top-1000"
     version_detect: bool = False
+    scan_type: str = "connect"       # connect | syn | udp | syn_udp | aggressive
+    os_detect: bool = False
+    port_script: str = ""            # "" | "default" | "banner" | "vuln" | "safe" | "http" | "ssl" | "smb" | "ftp" | "ssh" | "dns" | "smtp"
+    port_timing: int = 4             # T0-T5
+    skip_ping: bool = False          # -Pn
+    port_extra_flags: str = ""       # raw additional nmap flags
     web_depth: int = 1
-    recon_wordlist: str = "subdomains-top5000.txt"  # filename or preset alias ("ctf"|"medium"|"large")
+    recon_wordlist: str = "subdomains-top5000.txt"
     existing_ports: Optional[list] = None
-    project_name: Optional[str] = None  # auto-generated if omitted
+    project_name: Optional[str] = None
 
 
 class RenameBody(BaseModel):
@@ -98,7 +104,17 @@ async def run_scan(req: ScanRequest, request: Request):
                     return
                 yield sse("module_start", module="ports")
                 loop = asyncio.get_event_loop()
-                port_scanner = PortScanner(req.target, req.port_range, req.version_detect)
+                port_scanner = PortScanner(
+                    target=req.target,
+                    port_range=req.port_range,
+                    version_detect=req.version_detect,
+                    scan_type=req.scan_type,
+                    os_detect=req.os_detect,
+                    script=req.port_script,
+                    timing=req.port_timing,
+                    skip_ping=req.skip_ping,
+                    extra_flags=req.port_extra_flags,
+                )
                 results["ports"] = await loop.run_in_executor(None, port_scanner.run)
                 yield sse("ports", data=results["ports"])
 

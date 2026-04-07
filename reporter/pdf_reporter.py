@@ -275,21 +275,65 @@ def generate_pdf(project: dict) -> bytes:
     ports_res = res.get("ports")
     if ports_res:
         story += _section("Port Scan Results", S)
+
+        # Host & OS info
+        host_i = ports_res.get("host_info", {})
+        os_i   = ports_res.get("os_info", {})
+        if host_i or os_i:
+            meta_rows = []
+            if host_i.get("hostname"): meta_rows.append(["Hostname", host_i["hostname"]])
+            if host_i.get("mac"):      meta_rows.append(["MAC", host_i["mac"]])
+            if host_i.get("vendor"):   meta_rows.append(["Vendor",   host_i["vendor"]])
+            if os_i.get("name"):
+                meta_rows.append([
+                    "OS",
+                    f"{os_i['name']} ({os_i.get('accuracy','')}% confidence)"
+                    + (f" — {os_i['osfamily']}" if os_i.get("osfamily") else "")
+                ])
+            if meta_rows:
+                mt = Table([[Paragraph(k, S["bold"]), Paragraph(v, S["body"])]
+                            for k, v in meta_rows],
+                           colWidths=[25*mm, CONTENT_W-25*mm])
+                mt.setStyle(TableStyle([
+                    ("FONTSIZE", (0,0), (-1,-1), 8),
+                    ("TOPPADDING", (0,0), (-1,-1), 3),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+                    ("LEFTPADDING", (0,0), (-1,-1), 6),
+                    ("BACKGROUND", (0,0), (-1,-1), BG_ROW),
+                    ("BOX", (0,0), (-1,-1), 0.4, BORDER),
+                    ("INNERGRID", (0,0), (-1,-1), 0.4, BORDER),
+                ]))
+                story.append(mt)
+                story.append(Spacer(1, 2*mm))
+
         ports = ports_res.get("open_ports", [])
         if ports:
-            rows = [["Port", "Service", "Product / Version"]]
+            rows = [["Port", "Proto", "Service", "Product / Version", "Extra Info"]]
             for p in ports:
-                ver = " ".join(filter(None, [p.get("product", ""), p.get("version", "")])) or "—"
+                ver = " ".join(filter(None, [p.get("product",""), p.get("version","")])) or "—"
                 rows.append([
                     Paragraph(str(p["port"]), S["code"]),
-                    Paragraph(p.get("service", "—") or "—", S["body"]),
+                    Paragraph(p.get("proto","TCP"), S["body"]),
+                    Paragraph(p.get("service","—") or "—", S["body"]),
                     Paragraph(ver, S["body"]),
+                    Paragraph(p.get("extrainfo","") or "—", S["muted"]),
                 ])
-            t = _make_table(rows, [22 * mm, 38 * mm, CONTENT_W - 60 * mm])
+            t = _make_table(rows, [16*mm, 14*mm, 28*mm, 55*mm, CONTENT_W-113*mm])
             story.append(KeepTogether(t))
+
+            # Script output (abbreviated)
+            has_scripts = any(p.get("scripts") for p in ports)
+            if has_scripts:
+                story.append(Spacer(1, 2*mm))
+                story.append(Paragraph("NSE Script Output", S["sub_head"]))
+                for p in ports:
+                    for sid, out in (p.get("scripts") or {}).items():
+                        label = f"Port {p['port']} — {sid}"
+                        story.append(Paragraph(label, S["bold"]))
+                        story.append(Paragraph(out[:400].replace("\n", " "), S["code"]))
         else:
             story.append(Paragraph("No open ports found.", S["muted"]))
-        story.append(Spacer(1, 4 * mm))
+        story.append(Spacer(1, 4*mm))
 
     # ── CVE ───────────────────────────────────────────────────────────────────
     cve_res = res.get("cve")

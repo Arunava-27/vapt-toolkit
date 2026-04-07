@@ -8,7 +8,16 @@ import ResizableLayout from "../components/ResizableLayout";
 
 const DEFAULT_CONFIG = {
   target: "", recon: false, ports: false, cve: false, web: false,
-  full_scan: false, port_range: "top-1000", version_detect: false, web_depth: 1,
+  full_scan: false,
+  port_range: "top-1000",
+  scan_type: "connect",
+  version_detect: false,
+  os_detect: false,
+  port_script: "",
+  port_timing: 4,
+  skip_ping: false,
+  port_extra_flags: "",
+  web_depth: 1,
   recon_wordlist: "subdomains-top5000.txt",
 };
 

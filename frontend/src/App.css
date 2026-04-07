@@ -231,6 +231,128 @@ tr:hover td { background: #ffffff06; }
 .sev-low { background: var(--green); }
 .sev-na { background: var(--muted); color: #0d1117; }
 
+/* ── Port scan options ── */
+.scan-type-grid {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+.scan-type-opt {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: .35rem .6rem;
+  cursor: pointer;
+  font-size: .8rem;
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+  transition: border-color .15s, background .15s;
+}
+.scan-type-opt strong { color: var(--fg); font-size: .82rem; }
+.scan-type-opt span   { color: var(--muted); font-size: .72rem; }
+.scan-type-opt:hover  { border-color: var(--accent); background: #1f6feb0a; }
+.scan-type-opt.active { border-color: var(--accent); background: #1f6feb1a; }
+
+.timing-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.timing-desc { color: var(--muted); font-weight: 400; font-size: .72rem; margin-left: .3rem; }
+.timing-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: .68rem;
+  color: var(--muted);
+  margin-top: -.2rem;
+}
+.timing-labels .tl-active { color: var(--accent); font-weight: 700; }
+
+.script-pills { display: flex; flex-wrap: wrap; gap: .3rem; }
+
+/* ── Port results ── */
+.host-info-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  font-size: .82rem;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: .5rem .85rem;
+  color: var(--muted);
+}
+.host-info-bar b { color: var(--fg); margin-right: .25rem; }
+
+.os-block {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  padding: .6rem .85rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+.os-header { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.os-icon   { font-size: 1.1rem; }
+.os-name   { font-weight: 600; font-size: .9rem; color: var(--fg); }
+.os-acc    { font-size: .75rem; border-radius: 99px; padding: .1rem .4rem; font-weight: 600; }
+.acc-high  { background: #1a7f3733; color: #3fb950; }
+.acc-med   { background: #9a670033; color: #e3b341; }
+.acc-low   { background: #cf222e22; color: var(--red); }
+.os-tag    { background: #1f6feb22; color: var(--accent); border-radius: 4px; font-size: .72rem; padding: .1rem .4rem; }
+.os-cpe    { font-size: .72rem; color: var(--muted); }
+.os-alts   { font-size: .78rem; color: var(--muted); margin-top: .2rem; }
+.os-alts summary { cursor: pointer; }
+.os-alts ul { margin: .3rem 0 0 1rem; }
+
+.proto-tag {
+  display: inline-block;
+  border-radius: 4px;
+  font-size: .68rem;
+  font-weight: 700;
+  padding: .1rem .35rem;
+  text-transform: uppercase;
+}
+.proto-tcp  { background: #1f6feb22; color: var(--accent); }
+.proto-udp  { background: #8250df22; color: #d2a8ff; }
+
+.extra-info { font-size: .78rem; color: var(--muted); }
+.cpe-tag    { font-size: .72rem; color: var(--muted); }
+.scan-args-badge {
+  font-size: .7rem;
+  color: var(--muted);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: .1rem .4rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.script-block  { display: flex; flex-direction: column; gap: .25rem; }
+.script-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: .72rem;
+  cursor: pointer;
+  padding: .1rem .35rem;
+  text-align: left;
+  transition: border-color .15s;
+}
+.script-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.script-outputs { display: flex; flex-direction: column; gap: .35rem; margin-top: .2rem; }
+.script-entry   { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.script-id      { font-size: .72rem; font-weight: 600; color: var(--accent); padding: .2rem .5rem; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.script-out     { font-size: .72rem; color: var(--fg); padding: .4rem .5rem; margin: 0; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+
+.trace-block { font-size: .82rem; color: var(--muted); }
+.trace-block summary { cursor: pointer; padding: .3rem 0; }
+
 .none-msg { font-size: .88rem; color: var(--muted); font-style: italic; padding: .75rem 0; }
 
 /* ── Recon-specific ── */
