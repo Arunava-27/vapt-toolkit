@@ -4,6 +4,7 @@ import ScanForm from "../components/ScanForm";
 import ProgressLog from "../components/ProgressLog";
 import ScanStatus from "../components/ScanStatus";
 import ResultsDashboard from "../components/ResultsDashboard";
+import ResizableLayout from "../components/ResizableLayout";
 
 const DEFAULT_CONFIG = {
   target: "", recon: false, ports: false, cve: false, web: false,
@@ -170,38 +171,35 @@ export default function ScanPage() {
   const hasResults = Object.keys(results).length > 0;
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <ScanForm config={config} onChange={setConfig}
-          onScan={() => { setResults({}); setSavedProject(null); runScan(); }}
-          scanning={scanning} />
-      </aside>
-      <main className="main">
-        {log.length === 0 && !hasResults && (
-          <div className="empty">
-            <div className="hero">🛡️</div>
-            <h2>Ready to scan</h2>
-            <p>Enter a target, choose modules, and hit <strong>Run Scan</strong>.</p>
-          </div>
-        )}
+    <ResizableLayout sidebar={
+      <ScanForm config={config} onChange={setConfig}
+        onScan={() => { setResults({}); setSavedProject(null); runScan(); }}
+        scanning={scanning} />
+    }>
+      {log.length === 0 && !hasResults && (
+        <div className="empty">
+          <div className="hero">🛡️</div>
+          <h2>Ready to scan</h2>
+          <p>Enter a target, choose modules, and hit <strong>Run Scan</strong>.</p>
+        </div>
+      )}
 
-        {savedProject && (
-          <div className="save-banner">
-            <span>💾 Saved as <strong>{savedProject.name}</strong></span>
-            <Link className="save-banner-link" to={`/projects/${savedProject.id}`}>View project →</Link>
-            <button className="save-banner-close" onClick={() => setSavedProject(null)}>×</button>
-          </div>
-        )}
+      {savedProject && (
+        <div className="save-banner">
+          <span>💾 Saved as <strong>{savedProject.name}</strong></span>
+          <Link className="save-banner-link" to={`/projects/${savedProject.id}`}>View project →</Link>
+          <button className="save-banner-close" onClick={() => setSavedProject(null)}>×</button>
+        </div>
+      )}
 
-        {(scanning || canResume) && activatedModules.length > 0 && (
-          <ScanStatus moduleStatus={moduleStatus} getElapsed={getElapsed}
-            activatedModules={activatedModules} onStop={stopScan} onResume={resumeScan}
-            scanning={scanning} canResume={canResume} />
-        )}
+      {(scanning || canResume) && activatedModules.length > 0 && (
+        <ScanStatus moduleStatus={moduleStatus} getElapsed={getElapsed}
+          activatedModules={activatedModules} onStop={stopScan} onResume={resumeScan}
+          scanning={scanning} canResume={canResume} />
+      )}
 
-        {log.length > 0 && <ProgressLog entries={log} />}
-        <ResultsDashboard results={results} />
-      </main>
-    </div>
+      {log.length > 0 && <ProgressLog entries={log} />}
+      <ResultsDashboard results={results} />
+    </ResizableLayout>
   );
 }
