@@ -19,19 +19,25 @@ A comprehensive **Vulnerability Assessment & Penetration Testing** automation fr
 git clone https://github.com/Arunava-27/vapt-toolkit
 cd vapt-toolkit
 pip install -r requirements.txt
-python main.py --target example.com --full-scan
+python main.py scan --target example.com --full-scan
 ```
 
 ## 📋 Usage
 ```bash
-# Basic recon
-python main.py --target example.com --recon
-
-# Full scan with report
-python main.py --target example.com --full-scan --output report.html
+# Subdomain recon only
+python main.py scan --target example.com --recon
 
 # Port scan only
-python main.py --target 192.168.1.1 --ports --range 1-1024
+python main.py scan --target 192.168.1.1 --ports --range 1-1024
+
+# Web vulnerability probe only
+python main.py scan --target example.com --web
+
+# CVE correlation (after port scan)
+python main.py scan --target example.com --ports --cve
+
+# Full scan with HTML + JSON reports
+python main.py scan --target example.com --full-scan --output report.html --json-output report.json
 ```
 
 ## 🛠️ Tech Stack
