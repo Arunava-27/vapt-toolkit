@@ -4,4 +4,10 @@ __pycache__/
 dist/
 .env
 venv/
+.venv/
 reports/*.html
+frontend/node_modules/
+frontend/dist/
+# Large wordlist files — download via scanner/recon.py:download_wordlists()
+wordlists/subdomains-top5000.txt
+wordlists/subdomains-top20000.txt

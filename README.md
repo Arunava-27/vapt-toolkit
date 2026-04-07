@@ -15,12 +15,31 @@ A comprehensive **Vulnerability Assessment & Penetration Testing** automation fr
 - ⚡ **Async scanning** — concurrent target processing with asyncio
 
 ## 🚀 Quick Start
+
+### Backend (FastAPI + venv)
 ```bash
 git clone https://github.com/Arunava-27/vapt-toolkit
 cd vapt-toolkit
+
+# Create & activate virtual environment
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux / macOS
+
 pip install -r requirements.txt
-python main.py scan --target example.com --full-scan
+
+# Start the API server
+python server.py               # → http://localhost:8000
 ```
+
+### Frontend (Vite + React)
+```bash
+cd frontend
+npm install
+npm run dev                    # → http://localhost:5173
+```
+
+Open http://localhost:5173 in your browser.
 
 ## 📋 Usage
 ```bash

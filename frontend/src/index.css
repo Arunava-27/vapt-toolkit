@@ -1,0 +1,46 @@
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --accent2: #79c0ff;
+  --red: #f85149;
+  --orange: #f0883e;
+  --yellow: #d29922;
+  --green: #3fb950;
+  --r: 6px;
+  --font: "Segoe UI", system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+#root { max-width: 100%; }
+
+h1, h2, h3 { font-weight: 600; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button {
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 14px;
+}
+
+code {
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 0.85em;
+  background: #21262d;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
