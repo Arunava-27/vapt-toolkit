@@ -25,7 +25,15 @@ export function ScanProvider({ children }) {
   const scanIdRef      = useRef(null);   // updated immediately, not via useEffect
   const stoppedRef     = useRef(false);  // suppresses cancel error logs
 
-  useEffect(() => { resultsRef.current = results; }, [results]);
+  // Refs that mirror state so stopScan ([] deps) can read current values
+  const lastConfigRef       = useRef(null);
+  const moduleStatusRef     = useRef({});
+  const activatedModulesRef = useRef([]);
+
+  useEffect(() => { resultsRef.current      = results;          }, [results]);
+  useEffect(() => { lastConfigRef.current   = lastConfig;       }, [lastConfig]);
+  useEffect(() => { moduleStatusRef.current = moduleStatus;     }, [moduleStatus]);
+  useEffect(() => { activatedModulesRef.current = activatedModules; }, [activatedModules]);
 
   // Tick for elapsed timer
   useEffect(() => {
@@ -93,6 +101,7 @@ export function ScanProvider({ children }) {
         addLog("💾 Scan complete — saved to projects!", "done");
         if (evt.project_id) setSavedProject({ id: evt.project_id, name: evt.project_name });
         localStorage.removeItem("vapt-active-scan");
+        localStorage.removeItem("vapt-paused-scan");
         break;
     }
   }, []);
@@ -128,10 +137,31 @@ export function ScanProvider({ children }) {
     }
   }, [handleEvent]);
 
-  // ── Reconnect on mount if a scan was active ──────────────────────────────
+  // ── Reconnect on mount if a scan was active; otherwise restore paused state ─
   useEffect(() => {
+    const restorePaused = () => {
+      const raw = localStorage.getItem("vapt-paused-scan");
+      if (!raw) return;
+      try {
+        const { config, moduleStatus: ms, results: res, activatedModules: mods } = JSON.parse(raw);
+        if (!config) return;
+        setLastConfig(config);
+        setModuleStatus(ms || {});
+        setActivatedModules(mods || []);
+        setResults(res || {});
+        resultsRef.current = res || {};
+        setCanResume(true);
+        const doneCount  = Object.values(ms || {}).filter((v) => v === "done").length;
+        const totalCount = (mods || []).length;
+        setLog([{
+          message: `⏸ Paused scan for "${config.target}" — ${doneCount}/${totalCount} module(s) complete. Click Resume to continue.`,
+          type: "progress",
+        }]);
+      } catch { /**/ }
+    };
+
     const stored = localStorage.getItem("vapt-active-scan");
-    if (!stored) return;
+    if (!stored) { restorePaused(); return; }
     fetch(`/api/scan/${stored}/status`)
       .then((r) => r.json())
       .then((data) => {
@@ -143,14 +173,16 @@ export function ScanProvider({ children }) {
           _connectStream(stored);
         } else {
           localStorage.removeItem("vapt-active-scan");
+          restorePaused();
         }
       })
-      .catch(() => localStorage.removeItem("vapt-active-scan"));
+      .catch(() => { localStorage.removeItem("vapt-active-scan"); restorePaused(); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── startScan ────────────────────────────────────────────────────────────
   const startScan = useCallback(async (cfg) => {
+    localStorage.removeItem("vapt-paused-scan");  // new scan clears any paused state
     setLastConfig(cfg);
     const mods = getActivatedModules(cfg);
     setActivatedModules(mods);
@@ -201,13 +233,26 @@ export function ScanProvider({ children }) {
       try { await fetch(`/api/scan/${sid}`, { method: "DELETE" }); } catch { /**/ }
     }
 
-    setModuleStatus((s) =>
-      Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v === "running" ? "stopped" : v]))
+    // Compute the new module statuses (running → stopped) using the ref
+    const stoppedStatus = Object.fromEntries(
+      Object.entries(moduleStatusRef.current).map(([k, v]) => [k, v === "running" ? "stopped" : v])
     );
+
+    setModuleStatus(stoppedStatus);
     setScanning(false);
     setCanResume(true);
     setLog((prev) => [...prev, { message: "⏹ Scan stopped.", type: "error" }]);
     localStorage.removeItem("vapt-active-scan");
+
+    // Persist paused state so it survives page refresh
+    try {
+      localStorage.setItem("vapt-paused-scan", JSON.stringify({
+        config:           lastConfigRef.current,
+        moduleStatus:     stoppedStatus,
+        results:          resultsRef.current,
+        activatedModules: activatedModulesRef.current,
+      }));
+    } catch { /**/ }
   }, []);
 
   // ── resumeScan ───────────────────────────────────────────────────────────
@@ -216,6 +261,7 @@ export function ScanProvider({ children }) {
     const mods       = getActivatedModules(lastConfig);
     const incomplete = mods.filter((m) => moduleStatus[m] !== "done");
     if (!incomplete.length) return;
+    // startScan will clear vapt-paused-scan
     startScan({
       ...lastConfig,
       full_scan: false,
