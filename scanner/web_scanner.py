@@ -209,12 +209,16 @@ class WebScanner:
 
     # ── Orchestration ────────────────────────────────────────────────────────
 
-    async def run(self) -> dict:
+    async def run(self, progress_cb=None) -> dict:
         async with aiohttp.ClientSession() as session:
             # Crawl depth: d1=1page, d2=~10 pages (1 level), d3=~30 pages (2 levels)
             crawl_levels = {1: 0, 2: 1, 3: 2}
             self._visited.clear()
+            if progress_cb:
+                await progress_cb(f"Crawling {self.base_url} (depth {self.depth})…")
             pages = await self._crawl(session, self.base_url, crawl_levels[self.depth])
+            if progress_cb:
+                await progress_cb(f"Crawled {len(pages)} page(s) — queuing vulnerability tests…")
 
             tasks = []
             for page in pages:
@@ -235,6 +239,10 @@ class WebScanner:
             if self.depth >= 3:
                 tasks.append(self.test_header_injection(session))
 
+            if progress_cb:
+                await progress_cb(f"Running {len(tasks)} test(s) across {len(pages)} page(s)…")
             await asyncio.gather(*tasks)
+            if progress_cb and self.findings:
+                await progress_cb(f"Tests complete — {len(self.findings)} finding(s) detected")
 
         return {"target": self.base_url, "findings": self.findings, "total": len(self.findings)}

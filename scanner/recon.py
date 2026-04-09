@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 import aiohttp
+import dns.asyncresolver
 import dns.resolver
 import dns.exception
 
@@ -184,7 +185,7 @@ def _detect_cdn(cname_chain: list[str]) -> Optional[str]:
 # ── DNS resolution ────────────────────────────────────────────────────────────
 
 async def _resolve_host(host: str) -> dict:
-    resolver = dns.resolver.Resolver()
+    resolver = dns.asyncresolver.Resolver()
     resolver.timeout  = 3
     resolver.lifetime = 5
 
@@ -193,7 +194,7 @@ async def _resolve_host(host: str) -> dict:
     cname_chain: list[str] = []
 
     try:
-        ans = resolver.resolve(host, "A")
+        ans = await resolver.resolve(host, "A")
         ipv4 = [r.address for r in ans]
         canonical = ans.canonical_name.to_text()
         if canonical.rstrip(".").lower() != host.lower():
@@ -203,11 +204,11 @@ async def _resolve_host(host: str) -> dict:
 
     if not cname_chain:
         try:
-            ans = resolver.resolve(host, "CNAME")
+            ans = await resolver.resolve(host, "CNAME")
             target = ans[0].target.to_text()
             cname_chain.append(target)
             try:
-                ans2 = resolver.resolve(target.rstrip("."), "CNAME")
+                ans2 = await resolver.resolve(target.rstrip("."), "CNAME")
                 cname_chain.append(ans2[0].target.to_text())
             except Exception:
                 pass
@@ -215,7 +216,7 @@ async def _resolve_host(host: str) -> dict:
             pass
 
     try:
-        ans = resolver.resolve(host, "AAAA")
+        ans = await resolver.resolve(host, "AAAA")
         ipv6 = [r.address for r in ans]
     except Exception:
         pass
@@ -293,11 +294,15 @@ async def _rapiddns(session: aiohttp.ClientSession, domain: str) -> set[str]:
 
 # ── Brute-force ───────────────────────────────────────────────────────────────
 
-async def _brute_dns(subs: list[str], domain: str, concurrency: int = 80) -> list[dict]:
+async def _brute_dns(subs: list[str], domain: str, concurrency: int = 80,
+                     progress_cb=None) -> list[dict]:
     sem = asyncio.Semaphore(concurrency)
     found: list[dict] = []
+    total = len(subs)
+    done_count = 0
 
     async def probe(sub: str):
+        nonlocal done_count
         async with sem:
             host = f"{sub}.{domain}"
             info = await _resolve_host(host)
@@ -311,6 +316,12 @@ async def _brute_dns(subs: list[str], domain: str, concurrency: int = 80) -> lis
                     "cdn":       info["cdn"],
                     "source":    "brute",
                 })
+            done_count += 1
+            if progress_cb and total > 0 and done_count % 250 == 0:
+                pct = int(done_count * 100 / total)
+                await progress_cb(
+                    f"DNS brute-force: {done_count}/{total} ({pct}%) — {len(found)} hit(s) so far"
+                )
 
     await asyncio.gather(*[probe(s) for s in subs])
     return found
@@ -319,22 +330,22 @@ async def _brute_dns(subs: list[str], domain: str, concurrency: int = 80) -> lis
 # ── Root domain info ──────────────────────────────────────────────────────────
 
 async def _root_info(domain: str) -> dict:
-    resolver = dns.resolver.Resolver()
+    resolver = dns.asyncresolver.Resolver()
     resolver.timeout = 3
     resolver.lifetime = 5
     mx: list[str] = []
     ns: list[str] = []
     a:  list[str] = []
     try:
-        mx = sorted({str(r.exchange).rstrip(".") for r in resolver.resolve(domain, "MX")})
+        mx = sorted({str(r.exchange).rstrip(".") for r in await resolver.resolve(domain, "MX")})
     except Exception:
         pass
     try:
-        ns = sorted({str(r.target).rstrip(".") for r in resolver.resolve(domain, "NS")})
+        ns = sorted({str(r.target).rstrip(".") for r in await resolver.resolve(domain, "NS")})
     except Exception:
         pass
     try:
-        a = [r.address for r in resolver.resolve(domain, "A")]
+        a = [r.address for r in await resolver.resolve(domain, "A")]
     except Exception:
         pass
     return {"mx": mx, "ns": ns, "a": a}
@@ -355,10 +366,14 @@ class ReconScanner:
         self.wordlist_preset = wordlist
         self.custom_wordlist_path = custom_wordlist_path
 
-    async def run(self) -> dict:
+    async def run(self, progress_cb=None) -> dict:
         words = load_wordlist(self.wordlist_preset, self.custom_wordlist_path)
         wordlist_size = len(words)
 
+        if progress_cb:
+            await progress_cb(
+                f"Querying passive sources: crt.sh, HackerTarget, RapidDNS…"
+            )
         async with aiohttp.ClientSession() as session:
             passive_sets = await asyncio.gather(
                 _crtsh(session, self.domain),
@@ -367,9 +382,19 @@ class ReconScanner:
             )
 
         passive_subs: set[str] = set().union(*passive_sets)
-        brute_list = sorted(set(words) | passive_subs)
+        if progress_cb:
+            await progress_cb(
+                f"Passive sources returned {len(passive_subs)} unique subdomain(s)"
+            )
 
-        all_found = await _brute_dns(brute_list, self.domain)
+        brute_list = sorted(set(words) | passive_subs)
+        if progress_cb:
+            await progress_cb(
+                f"Starting DNS brute-force on {len(brute_list)} candidate(s) "
+                f"(wordlist: {wordlist_size}, passive: {len(passive_subs)})…"
+            )
+
+        all_found = await _brute_dns(brute_list, self.domain, progress_cb=progress_cb)
 
         seen: set[str] = set()
         unique: list[dict] = []

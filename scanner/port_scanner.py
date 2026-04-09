@@ -9,6 +9,8 @@ Enhanced port scanner — python-nmap wrapper with:
   • Host-level: hostname, MAC, vendor, traceroute hops
 """
 import nmap
+import os
+import signal
 from typing import Optional
 
 # ── Presets ───────────────────────────────────────────────────────────────────
@@ -67,6 +69,31 @@ class PortScanner:
         self.timing       = max(0, min(5, int(timing)))
         self.skip_ping    = skip_ping
         self.extra_flags  = extra_flags.strip()
+        self._nm: Optional[nmap.PortScanner] = None
+        self._stopped = False
+
+    def stop(self):
+        """Kill the running nmap process immediately."""
+        self._stopped = True
+        nm = self._nm
+        if nm is None:
+            return
+        # python-nmap exposes the subprocess as nm._nm_proc_scanprocess
+        proc = getattr(nm, "_nm_proc_scanprocess", None)
+        if proc is None:
+            return
+        try:
+            if os.name == "nt":
+                import subprocess
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                               capture_output=True)
+            else:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
     def _build_args(self) -> tuple[str, Optional[str]]:
         parts: list[str] = [f"-T{self.timing}", "--open -n"]
@@ -104,9 +131,15 @@ class PortScanner:
         return args, self.port_range if self.port_range else None
 
     def run(self) -> dict:
+        if self._stopped:
+            return {"target": self.target, "host_info": {}, "os_info": {}, "open_ports": [], "traceroute": [], "scan_args": ""}
         nm = nmap.PortScanner()
+        self._nm = nm
         args, ports_arg = self._build_args()
         nm.scan(self.target, ports_arg, arguments=args)
+        self._nm = None
+        if self._stopped:
+            return {"target": self.target, "host_info": {}, "os_info": {}, "open_ports": [], "traceroute": [], "scan_args": args}
 
         open_ports: list[dict] = []
         os_info:    dict       = {}

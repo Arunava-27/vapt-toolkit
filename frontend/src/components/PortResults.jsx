@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PortCharts } from "./ScanCharts";
 
 function ProtoTag({ proto }) {
   return (
@@ -48,6 +49,9 @@ export default function PortResults({ data }) {
           </code>
         )}
       </div>
+
+      {/* ── Charts ── */}
+      <PortCharts data={data} />
 
       {/* ── Host info ── */}
       {(host.hostname || host.mac || host.vendor) && (

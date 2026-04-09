@@ -338,7 +338,8 @@ def generate_pdf(project: dict) -> bytes:
     # ── CVE ───────────────────────────────────────────────────────────────────
     cve_res = res.get("cve")
     if cve_res:
-        story += _section("CVE Correlation", S)
+        sources_used = cve_res.get("sources_used", ["NVD"])
+        story += _section(f"CVE Correlation  [{', '.join(sources_used)}]", S)
         correlations = [c for c in cve_res.get("correlations", []) if c.get("cves")]
         if correlations:
             for entry in correlations:
@@ -348,18 +349,26 @@ def generate_pdf(project: dict) -> bytes:
                     chunk_label = label.strip() if idx == 0 else f"{label.strip()} (continued)"
                     story.append(Paragraph(chunk_label, S["sub_head"]))
 
-                    rows = [["CVE ID", "Severity", "Score", "Description"]]
+                    rows = [["CVE / ID", "Source", "Severity", "Score", "Description / Exploits"]]
                     for cve in cve_chunk:
-                        nvd_url = f"https://nvd.nist.gov/vuln/detail/{cve['cve_id']}"
+                        ref_url = ((cve.get("references") or [None])[0]
+                                   or f"https://nvd.nist.gov/vuln/detail/{cve['cve_id']}")
+                        exploit_text = ""
+                        if cve.get("exploits"):
+                            exploit_text = "<br/>" + "<br/>".join(
+                                f'<link href="{e}" color="#cf222e">💥 {e[:60]}</link>'
+                                for e in cve["exploits"][:2]
+                            )
                         rows.append([
-                            Paragraph(f'<link href="{nvd_url}" color="#1f6feb">{cve["cve_id"]}</link>', S["body"]),
+                            Paragraph(f'<link href="{ref_url}" color="#1f6feb">{cve["cve_id"]}</link>', S["body"]),
+                            Paragraph(cve.get("source", "NVD"), S["body"]),
                             Paragraph(_sev_text(cve.get("severity")), S["bold"]),
                             Paragraph(str(cve.get("score", "N/A")), S["body"]),
-                            Paragraph(cve.get("description", "")[:280], S["body"]),
+                            Paragraph(cve.get("description", "")[:240] + exploit_text, S["body"]),
                         ])
 
-                    # Shift width from ID/severity/score to description for better wrapping.
-                    t = _make_table(rows, [27 * mm, 18 * mm, 13 * mm, CONTENT_W - 58 * mm])
+                    col_w = [27*mm, 18*mm, 18*mm, 13*mm, CONTENT_W - 76*mm]
+                    t = _make_table(rows, col_w)
                     _apply_sev_colors(t, cve_chunk)
                     story.append(KeepTogether(t))
                     story.append(Spacer(1, 3 * mm))

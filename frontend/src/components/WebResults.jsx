@@ -1,4 +1,5 @@
 import SeverityBadge from "./SeverityBadge";
+import { WebCharts } from "./ScanCharts";
 
 export default function WebResults({ data }) {
   if (!data) return null;
@@ -10,6 +11,10 @@ export default function WebResults({ data }) {
         <h2>Web Vulnerabilities</h2>
         <span className="badge-count">{findings.length} finding{findings.length !== 1 ? "s" : ""}</span>
       </div>
+
+      {/* Charts */}
+      <WebCharts data={data} />
+
       {findings.length === 0 ? (
         <p className="none-msg">No web vulnerabilities detected.</p>
       ) : (

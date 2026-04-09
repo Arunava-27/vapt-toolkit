@@ -95,6 +95,38 @@ def list_projects() -> list[dict]:
     return out
 
 
+def dashboard_stats() -> dict:
+    """Aggregate stats across all projects for the dashboard."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT config, results, created_at FROM projects ORDER BY created_at DESC"
+        ).fetchall()
+
+    totals = {"projects": len(rows), "ports": 0, "cves": 0, "subdomains": 0, "web": 0}
+    severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "NONE": 0}
+    module_usage = {"recon": 0, "ports": 0, "cve": 0, "web": 0}
+
+    for r in rows:
+        cfg = json.loads(r["config"] or "{}")
+        res = json.loads(r["results"] or "{}")
+        sm  = _summary(res)
+
+        totals["ports"]      += sm["ports"]
+        totals["cves"]       += sm["cves"]
+        totals["subdomains"] += sm["subdomains"]
+        totals["web"]        += sm["web"]
+
+        for mod in ("recon", "ports", "cve", "web"):
+            if cfg.get("full_scan") or cfg.get(mod):
+                module_usage[mod] += 1
+
+        for corr in res.get("cve", {}).get("correlations", []):
+            sev = (corr.get("severity") or "NONE").upper()
+            severity[sev] = severity.get(sev, 0) + 1
+
+    return {"totals": totals, "severity": severity, "module_usage": module_usage}
+
+
 def get_project(pid: str) -> dict | None:
     with _conn() as c:
         row = c.execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()

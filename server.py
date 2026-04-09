@@ -3,7 +3,9 @@
 
 import asyncio
 import json
+import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
@@ -11,19 +13,46 @@ load_dotenv()
 import os
 import re as _re
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
-from typing import Optional
 
 from scanner.recon import ReconScanner
 from scanner.port_scanner import PortScanner
 from scanner.web_scanner import WebScanner
 from scanner.cve_scanner import CVEScanner
-from database import init_db, save_project, list_projects, get_project, rename_project, delete_project
+from database import init_db, save_project, list_projects, get_project, rename_project, delete_project, dashboard_stats
 from reporter.pdf_reporter import generate_pdf
+
+
+# ── Background scan registry ──────────────────────────────────────────────────
+
+@dataclass
+class ScanState:
+    scan_id: str
+    target: str
+    config: dict
+    events: list = field(default_factory=list)
+    status: str = "running"   # running | done | error | stopped
+    task: Optional[asyncio.Task] = None
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    port_scanner: Optional[object] = None   # held so stop() can kill nmap
+
+ACTIVE_SCANS: dict[str, ScanState] = {}
+
+def _gc_scans():
+    """Remove finished scans older than 2 hours."""
+    cutoff = datetime.now().timestamp() - 7200
+    stale = [k for k, v in ACTIVE_SCANS.items()
+             if v.status != "running"
+             and datetime.fromisoformat(v.created_at).timestamp() < cutoff]
+    for k in stale:
+        del ACTIVE_SCANS[k]
 
 
 @asynccontextmanager
@@ -74,6 +103,9 @@ class RenameBody(BaseModel):
 def sse(event: str, **kwargs) -> str:
     return f"data: {json.dumps({'event': event, **kwargs}, default=str)}\n\n"
 
+def sse_dict(d: dict) -> str:
+    return f"data: {json.dumps(d, default=str)}\n\n"
+
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
@@ -82,27 +114,111 @@ async def health():
     return {"status": "ok"}
 
 
-# ── Scan (SSE streaming) ──────────────────────────────────────────────────────
+# ── Scan validation ───────────────────────────────────────────────────────────
 
-@app.post("/api/scan")
-async def run_scan(req: ScanRequest, request: Request):
-    async def stream():
-        results = {}
-        try:
-            yield sse("start", target=req.target)
+_BIG_TARGETS = [
+    "facebook.com", "google.com", "amazon.com", "microsoft.com", "cloudflare.com",
+    "twitter.com", "x.com", "instagram.com", "youtube.com", "netflix.com",
+    "apple.com", "github.com", "linkedin.com", "tiktok.com", "reddit.com",
+    "whatsapp.com", "wikipedia.org", "yahoo.com",
+]
 
-            if req.recon or req.full_scan:
-                if await request.is_disconnected():
-                    return
-                yield sse("module_start", module="recon")
+@app.post("/api/scan/validate")
+async def validate_scan(req: ScanRequest):
+    warnings = []
+    target = req.target.lower().strip()
+
+    if any(t in target for t in _BIG_TARGETS):
+        warnings.append({
+            "level": "warning", "code": "big_target",
+            "message": f"'{req.target}' is a major public service. Scans will likely be rate-limited, "
+                       "blocked, or very slow. Only scan systems you own or have explicit permission to test."
+        })
+
+    if target.startswith(("http://", "https://")):
+        warnings.append({
+            "level": "info", "code": "protocol_in_target",
+            "message": "Target includes http:// or https://. Port and recon scans expect a bare domain or IP — "
+                       "the protocol prefix will be stripped for those modules."
+        })
+
+    if req.scan_type in ("syn", "syn_udp", "udp"):
+        warnings.append({
+            "level": "warning", "code": "needs_root",
+            "message": f"Scan type '{req.scan_type}' requires root/Administrator privileges "
+                       "and Npcap on Windows. The scan will fail without these."
+        })
+
+    if req.port_range == "full":
+        warnings.append({
+            "level": "warning", "code": "full_ports",
+            "message": "Full port scan (all 65 535 ports) can take 10–30+ minutes for remote targets."
+        })
+
+    if req.port_timing == 5:
+        warnings.append({
+            "level": "info", "code": "t5_timing",
+            "message": "T5 (Insane) timing floods the target with packets — may trigger IDS/IPS or "
+                       "produce inaccurate results on slow links."
+        })
+
+    if req.cve and not req.ports and not req.full_scan and not req.existing_ports:
+        warnings.append({
+            "level": "error", "code": "cve_no_ports",
+            "message": "CVE lookup needs port scan results. Enable the 'Port Scan' module, "
+                       "or run a port scan first and resume with CVE."
+        })
+
+    if req.scan_type == "aggressive" and (req.version_detect or req.os_detect):
+        warnings.append({
+            "level": "info", "code": "aggressive_redundant",
+            "message": "Aggressive mode (-A) already includes version detection (-sV) and OS detection (-O). "
+                       "Those toggles are redundant."
+        })
+
+    if req.full_scan:
+        warnings.append({
+            "level": "info", "code": "full_scan_time",
+            "message": "Full scan runs all 4 modules sequentially. Expect 5–30+ minutes depending on target."
+        })
+
+    if req.port_script == "vuln":
+        warnings.append({
+            "level": "warning", "code": "vuln_scripts",
+            "message": "NSE 'vuln' scripts actively probe for vulnerabilities and can be intrusive. "
+                       "Only use on systems you own or have explicit permission to test."
+        })
+
+    return {"warnings": warnings}
+
+
+# ── Background scan task ──────────────────────────────────────────────────────
+
+async def _execute_scan(state: ScanState):
+    req = ScanRequest(**state.config)
+    results: dict = {}
+
+    def push(event: str, **kwargs):
+        state.events.append({"event": event, **kwargs})
+
+    async def push_progress(msg: str):
+        push("progress", message=msg)
+
+    try:
+        push("start", target=req.target)
+
+        if (req.recon or req.full_scan) and state.status != "stopped":
+            push("module_start", module="recon")
+            try:
                 scanner = ReconScanner(req.target, wordlist=req.recon_wordlist)
-                results["recon"] = await scanner.run()
-                yield sse("recon", data=results["recon"])
+                results["recon"] = await scanner.run(progress_cb=push_progress)
+                push("recon", data=results["recon"])
+            except Exception as e:
+                push("module_error", module="recon", message=str(e))
 
-            if req.ports or req.full_scan:
-                if await request.is_disconnected():
-                    return
-                yield sse("module_start", module="ports")
+        if (req.ports or req.full_scan) and state.status != "stopped":
+            push("module_start", module="ports")
+            try:
                 loop = asyncio.get_event_loop()
                 port_scanner = PortScanner(
                     target=req.target,
@@ -115,48 +231,159 @@ async def run_scan(req: ScanRequest, request: Request):
                     skip_ping=req.skip_ping,
                     extra_flags=req.port_extra_flags,
                 )
+                state.port_scanner = port_scanner          # expose for stop()
+                push("progress", message=f"Launching nmap on {req.target} (range: {req.port_range}, type: {req.scan_type})…")
                 results["ports"] = await loop.run_in_executor(None, port_scanner.run)
-                yield sse("ports", data=results["ports"])
+                state.port_scanner = None
+                if state.status == "stopped":
+                    push("module_error", module="ports", message="Stopped by user.")
+                else:
+                    push("ports", data=results["ports"])
+            except Exception as e:
+                push("module_error", module="ports", message=str(e))
 
-            open_ports = (
-                results.get("ports", {}).get("open_ports")
-                or req.existing_ports
-                or []
-            )
-            if (req.cve or req.full_scan) and open_ports:
-                if await request.is_disconnected():
-                    return
-                yield sse("module_start", module="cve")
+        open_ports = (
+            results.get("ports", {}).get("open_ports")
+            or req.existing_ports
+            or []
+        )
+
+        if (req.cve or req.full_scan) and open_ports and state.status != "stopped":
+            push("module_start", module="cve")
+            try:
                 cve_scanner = CVEScanner(open_ports)
-                results["cve"] = await cve_scanner.run()
-                yield sse("cve", data=results["cve"])
+                results["cve"] = await cve_scanner.run(progress_cb=push_progress)
+                push("cve", data=results["cve"])
+            except Exception as e:
+                push("module_error", module="cve", message=str(e))
 
-            if req.web or req.full_scan:
-                if await request.is_disconnected():
-                    return
-                yield sse("module_start", module="web")
+        if (req.web or req.full_scan) and state.status != "stopped":
+            push("module_start", module="web")
+            try:
                 url = req.target if req.target.startswith("http") else f"https://{req.target}"
                 web_scanner = WebScanner(url, depth=req.web_depth)
-                results["web"] = await web_scanner.run()
-                yield sse("web", data=results["web"])
+                results["web"] = await web_scanner.run(progress_cb=push_progress)
+                push("web", data=results["web"])
+            except Exception as e:
+                push("module_error", module="web", message=str(e))
 
-            # Auto-save to DB
+        if state.status != "stopped":
             name = (req.project_name or "").strip() or \
                    f"{req.target} — {datetime.now().strftime('%b %d %H:%M')}"
-            pid = save_project(name, req.target, req.dict(), results)
-            yield sse("done", results=results, project_id=pid, project_name=name)
+            pid = save_project(name, req.target, state.config, results)
+            state.project_id = pid
+            state.project_name = name
+            push("done", project_id=pid, project_name=name)
+            state.status = "done"
 
-        except Exception as e:
-            yield sse("error", message=str(e))
+    except asyncio.CancelledError:
+        state.status = "stopped"
+        push("stopped", message="Scan was cancelled.")
+    except Exception as e:
+        state.status = "error"
+        push("error", message=str(e))
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+
+# ── Scan endpoints ────────────────────────────────────────────────────────────
+
+@app.post("/api/scan")
+async def start_scan(req: ScanRequest):
+    _gc_scans()
+    scan_id = str(uuid.uuid4())
+    state = ScanState(scan_id=scan_id, target=req.target, config=req.dict())
+    ACTIVE_SCANS[scan_id] = state
+    state.task = asyncio.create_task(_execute_scan(state))
+    return {"scan_id": scan_id}
+
+
+@app.get("/api/scan/{scan_id}/stream")
+async def scan_stream(scan_id: str, request: Request):
+    state = ACTIVE_SCANS.get(scan_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    async def stream():
+        sent = 0
+        while True:
+            if await request.is_disconnected():
+                break
+            while sent < len(state.events):
+                yield sse_dict(state.events[sent])
+                sent += 1
+            if state.status != "running":
+                break
+            await asyncio.sleep(0.3)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
+
+
+@app.get("/api/scan/{scan_id}/status")
+async def scan_status(scan_id: str):
+    state = ACTIVE_SCANS.get(scan_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return {
+        "scan_id":      scan_id,
+        "status":       state.status,
+        "target":       state.target,
+        "events_count": len(state.events),
+        "project_id":   state.project_id,
+        "project_name": state.project_name,
+        "created_at":   state.created_at,
+    }
+
+
+@app.delete("/api/scan/{scan_id}")
+async def stop_scan_endpoint(scan_id: str):
+    state = ACTIVE_SCANS.get(scan_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    state.status = "stopped"
+    # Kill the nmap subprocess if a port scan is in progress
+    if state.port_scanner:
+        try:
+            state.port_scanner.stop()
+        except Exception:
+            pass
+    if state.task and not state.task.done():
+        state.task.cancel()
+    return {"ok": True}
+
+
+@app.get("/api/scans")
+async def list_active_scans():
+    return [
+        {
+            "scan_id":      s.scan_id,
+            "status":       s.status,
+            "target":       s.target,
+            "created_at":   s.created_at,
+            "events_count": len(s.events),
+            "project_id":   s.project_id,
+        }
+        for s in ACTIVE_SCANS.values()
+    ]
 
 
 # ── Projects CRUD ─────────────────────────────────────────────────────────────
 
 @app.get("/api/projects")
 async def api_list_projects():
-    return list_projects()
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, list_projects)
+
+
+@app.get("/api/dashboard")
+async def api_dashboard():
+    loop = asyncio.get_event_loop()
+    stats = await loop.run_in_executor(None, dashboard_stats)
+    active = sum(1 for s in ACTIVE_SCANS.values() if s.status == "running")
+    recent = await loop.run_in_executor(None, list_projects)
+    return {**stats, "active_scans": active, "recent_projects": recent[:5]}
 
 
 @app.get("/api/projects/{pid}")
@@ -348,4 +575,4 @@ async def api_delete_wordlist(name: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)
