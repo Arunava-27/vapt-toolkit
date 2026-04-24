@@ -24,8 +24,12 @@ from scanner.recon import ReconScanner
 from scanner.port_scanner import PortScanner
 from scanner.web_scanner import WebScanner
 from scanner.cve_scanner import CVEScanner
+from scanner.scope import validate_scope, normalize_target, get_scope_summary
+from scanner.scan_logger import ScanLogger
+from scanner.web.web_scanner_orchestrator import WebVulnerabilityScanner, WebScanConfiguration
 from database import init_db, save_project, list_projects, get_project, rename_project, delete_project, dashboard_stats
 from reporter.pdf_reporter import generate_pdf
+from wsl_config import wsl
 
 
 # ── Background scan registry ──────────────────────────────────────────────────
@@ -80,6 +84,7 @@ class ScanRequest(BaseModel):
     web: bool = False
     cve: bool = False
     full_scan: bool = False
+    scan_classification: str = "active"  # active | passive | hybrid
     port_range: str = "top-1000"
     version_detect: bool = False
     scan_type: str = "connect"       # connect | syn | udp | syn_udp | aggressive
@@ -89,9 +94,22 @@ class ScanRequest(BaseModel):
     skip_ping: bool = False          # -Pn
     port_extra_flags: str = ""       # raw additional nmap flags
     web_depth: int = 1
+    web_vulnerability_scan: bool = False  # Enable comprehensive web vulnerability scanning
+    web_test_injection: bool = True
+    web_test_xss: bool = True
+    web_test_auth: bool = True
+    web_test_idor: bool = True
+    web_test_csrf_ssrf: bool = True
+    web_test_file_upload: bool = True
+    web_test_misconfiguration: bool = True
+    web_test_sensitive_data: bool = True
+    web_test_business_logic: bool = True
+    web_test_rate_limiting: bool = True
     recon_wordlist: str = "subdomains-top5000.txt"
     existing_ports: Optional[list] = None
     project_name: Optional[str] = None
+    scope: Optional[list[str]] = None  # Authorized targets for active scans
+    override_robots_txt: bool = False  # Override robots.txt (false = respect it)
 
 
 class RenameBody(BaseModel):
@@ -112,6 +130,12 @@ def sse_dict(d: dict) -> str:
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/system/tools")
+async def system_tools():
+    """Get status of external tools (Nmap, SearchSploit)."""
+    return wsl.get_status()
 
 
 # ── Scan validation ───────────────────────────────────────────────────────────
@@ -162,7 +186,9 @@ async def validate_scan(req: ScanRequest):
                        "produce inaccurate results on slow links."
         })
 
-    if req.cve and not req.ports and not req.full_scan and not req.existing_ports:
+    # For active/hybrid scans, CVE needs port data. For passive scans, CVE uses OSINT data only.
+    is_passive = req.scan_classification == "passive"
+    if req.cve and not is_passive and not req.ports and not req.full_scan and not req.existing_ports:
         warnings.append({
             "level": "error", "code": "cve_no_ports",
             "message": "CVE lookup needs port scan results. Enable the 'Port Scan' module, "
@@ -205,9 +231,32 @@ async def _execute_scan(state: ScanState):
         push("progress", message=msg)
 
     try:
-        push("start", target=req.target)
+        push("start", target=req.target, scan_type=req.scan_classification)
+        
+        # Validate target for active scans
+        is_active = req.scan_classification == "active"
+        if is_active or req.ports or req.web:
+            try:
+                if not validate_scope(req.target, req.scope):
+                    error_msg = f"Target '{req.target}' is NOT in authorized scope. {get_scope_summary(req.scope or [])}"
+                    push("module_error", module="scope", message=error_msg)
+                    state.status = "error"
+                    raise ValueError(error_msg)
+                if req.scope:
+                    push("progress", message=f"✓ Target verified in scope. {get_scope_summary(req.scope)}")
+            except ValueError as e:
+                push("module_error", module="scope", message=str(e))
+                state.status = "error"
+                raise
+        
+        # Determine which modules to run based on scan classification
+        # Passive: recon + cve (non-intrusive)
+        # Active: ports + web + cve (intrusive probing)
+        # Hybrid: all modules
+        is_passive = req.scan_classification == "passive"
+        is_hybrid = req.scan_classification == "hybrid" or req.full_scan
 
-        if (req.recon or req.full_scan) and state.status != "stopped":
+        if (req.recon or req.full_scan or is_passive or is_hybrid) and state.status != "stopped":
             push("module_start", module="recon")
             try:
                 scanner = ReconScanner(req.target, wordlist=req.recon_wordlist)
@@ -216,14 +265,20 @@ async def _execute_scan(state: ScanState):
             except Exception as e:
                 push("module_error", module="recon", message=str(e))
 
-        if (req.ports or req.full_scan) and state.status != "stopped":
+        # CONSTRAINT: Passive scans NEVER run port or web scanning
+        if is_passive:
+            push("progress", message="[PASSIVE SCAN] Skipping port scanning (intrusive). Only OSINT and CVE lookups.")
+        
+        if (req.ports or req.full_scan or is_active or is_hybrid) and not is_passive and state.status != "stopped":
             push("module_start", module="ports")
             try:
                 loop = asyncio.get_event_loop()
+                # Auto-enable version detection if CVE scanning is requested
+                version_detect = req.version_detect or (req.cve or req.full_scan)
                 port_scanner = PortScanner(
                     target=req.target,
                     port_range=req.port_range,
-                    version_detect=req.version_detect,
+                    version_detect=version_detect,
                     scan_type=req.scan_type,
                     os_detect=req.os_detect,
                     script=req.port_script,
@@ -248,16 +303,22 @@ async def _execute_scan(state: ScanState):
             or []
         )
 
-        if (req.cve or req.full_scan) and open_ports and state.status != "stopped":
+        # CVE scanning works with both port data AND OSINT recon data
+        if (req.cve or req.full_scan or is_passive or is_hybrid) and state.status != "stopped":
             push("module_start", module="cve")
             try:
-                cve_scanner = CVEScanner(open_ports)
+                # For passive scans: use recon data; for active: use port data
+                recon_data = results.get("recon") if is_passive else None
+                cve_scanner = CVEScanner(open_ports=open_ports or [], recon_data=recon_data)
                 results["cve"] = await cve_scanner.run(progress_cb=push_progress)
                 push("cve", data=results["cve"])
             except Exception as e:
                 push("module_error", module="cve", message=str(e))
+        elif is_passive and not open_ports:
+            push("progress", message="[PASSIVE SCAN] CVE lookup uses public OSINT data only. No direct port scanning.")
 
-        if (req.web or req.full_scan) and state.status != "stopped":
+        # CONSTRAINT: Passive scans NEVER run web scanning (active probing)
+        if (req.web or req.full_scan or is_active or is_hybrid) and not is_passive and state.status != "stopped":
             push("module_start", module="web")
             try:
                 url = req.target if req.target.startswith("http") else f"https://{req.target}"
@@ -266,14 +327,65 @@ async def _execute_scan(state: ScanState):
                 push("web", data=results["web"])
             except Exception as e:
                 push("module_error", module="web", message=str(e))
+        
+        # Comprehensive Web Vulnerability Scanner (NEW)
+        if (req.web_vulnerability_scan or req.full_scan or is_active or is_hybrid) and not is_passive and state.status != "stopped":
+            push("module_start", module="web_vulnerabilities")
+            try:
+                url = req.target if req.target.startswith("http") else f"https://{req.target}"
+                
+                # Build web scan configuration from request
+                web_config = WebScanConfiguration(
+                    target_url=url,
+                    scope=req.scope,
+                    scope_strict=True,
+                    override_robots_txt=req.override_robots_txt,
+                    verify_ssl=True,
+                    request_timeout=10.0,
+                    depth=req.web_depth,
+                    test_injection=req.web_test_injection,
+                    test_xss=req.web_test_xss,
+                    test_auth=req.web_test_auth,
+                    test_idor=req.web_test_idor,
+                    test_csrf_ssrf=req.web_test_csrf_ssrf,
+                    test_file_upload=req.web_test_file_upload,
+                    test_misconfiguration=req.web_test_misconfiguration,
+                    test_sensitive_data=req.web_test_sensitive_data,
+                    test_business_logic=req.web_test_business_logic,
+                    test_rate_limiting=req.web_test_rate_limiting,
+                    max_pages_to_crawl=50,
+                    max_payloads_per_param=30,
+                    rate_limit_delay=0.1,
+                )
+                
+                push("progress", message="Starting comprehensive web vulnerability scanning (13 modules)...")
+                
+                loop = asyncio.get_event_loop()
+                web_vuln_scanner = WebVulnerabilityScanner(web_config)
+                
+                # Run scanner in executor to avoid blocking
+                async def run_web_scan():
+                    return await loop.run_in_executor(None, web_vuln_scanner.run_scan)
+                
+                web_vuln_results = await run_web_scan()
+                results["web_vulnerabilities"] = web_vuln_results
+                
+                # Push findings with counts
+                total_findings = web_vuln_results.get("total_findings", 0)
+                high_severity = web_vuln_results.get("high_severity_count", 0)
+                push("progress", message=f"Web vulnerability scan complete: {total_findings} total findings ({high_severity} high severity)")
+                push("web_vulnerabilities", data=web_vuln_results)
+                
+            except Exception as e:
+                push("module_error", module="web_vulnerabilities", message=str(e))
 
         if state.status != "stopped":
             name = (req.project_name or "").strip() or \
-                   f"{req.target} — {datetime.now().strftime('%b %d %H:%M')}"
+                   f"{req.target} — {req.scan_classification.title()} — {datetime.now().strftime('%b %d %H:%M')}"
             pid = save_project(name, req.target, state.config, results)
             state.project_id = pid
             state.project_name = name
-            push("done", project_id=pid, project_name=name)
+            push("done", project_id=pid, project_name=name, scan_type=req.scan_classification)
             state.status = "done"
 
     except asyncio.CancelledError:

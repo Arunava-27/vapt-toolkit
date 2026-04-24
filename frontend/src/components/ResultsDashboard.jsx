@@ -3,7 +3,11 @@ import PortResults from "./PortResults";
 import CVEResults from "./CVEResults";
 import WebResults from "./WebResults";
 
-export default function ResultsDashboard({ results, id = "results-content" }) {
+export default function ResultsDashboard({
+  results,
+  id = "results-content",
+  collapsibleTables = false,
+}) {
   if (!results || !Object.keys(results).length) return null;
   return (
     <div id={id}>
@@ -25,10 +29,10 @@ export default function ResultsDashboard({ results, id = "results-content" }) {
           <div className="lbl">Web Findings</div>
         </div>
       </div>
-      <ReconResults data={results.recon} />
-      <PortResults  data={results.ports} />
-      <CVEResults   data={results.cve}   />
-      <WebResults   data={results.web}   />
+      <ReconResults data={results.recon} collapsibleTables={collapsibleTables} />
+      <PortResults  data={results.ports} collapsibleTables={collapsibleTables} />
+      <CVEResults   data={results.cve} collapsibleTables={collapsibleTables} />
+      <WebResults   data={results.web} collapsibleTables={collapsibleTables} />
     </div>
   );
 }

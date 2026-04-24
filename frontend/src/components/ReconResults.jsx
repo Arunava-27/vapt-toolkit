@@ -1,9 +1,11 @@
+import CollapsibleTable from "./CollapsibleTable";
+
 function CdnBadge({ cdn }) {
   if (!cdn) return <span className="badge-direct" title="Direct server (no CDN detected)">Direct</span>;
   return <span className="badge-cdn" title={`Behind CDN: ${cdn}`}>CDN · {cdn}</span>;
 }
 
-export default function ReconResults({ data }) {
+export default function ReconResults({ data, collapsibleTables = false }) {
   if (!data) return null;
   const subs   = data.subdomains || [];
   const root   = data.root || {};
@@ -42,6 +44,39 @@ export default function ReconResults({ data }) {
 
       {subs.length === 0 ? (
         <p className="none-msg">No subdomains discovered.</p>
+      ) : collapsibleTables ? (
+        <CollapsibleTable title="Subdomains" countLabel={`${subs.length} row${subs.length !== 1 ? "s" : ""}`}>
+          <div className="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Subdomain</th>
+                  <th>IPv4</th>
+                  <th>IPv6</th>
+                  <th>CNAME Chain</th>
+                  <th>CDN / Hosting</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subs.map((s, i) => (
+                  <tr key={i} className={s.cdn ? "row-cdn" : "row-direct"}>
+                    <td><code>{s.subdomain}</code></td>
+                    <td>{(s.ipv4 || s.ips || []).join(", ") || "—"}</td>
+                    <td>{(s.ipv6 || []).join(", ") || "—"}</td>
+                    <td>
+                      {(s.cname || []).length > 0
+                        ? <code className="cname-chain">{(s.cname || []).join(" → ")}</code>
+                        : "—"}
+                    </td>
+                    <td><CdnBadge cdn={s.cdn} /></td>
+                    <td><span className="source-tag">{s.source || "brute"}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleTable>
       ) : (
         <div className="tbl-wrap">
           <table>

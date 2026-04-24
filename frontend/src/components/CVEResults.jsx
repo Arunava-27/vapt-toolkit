@@ -1,6 +1,7 @@
 import { useState } from "react";
 import SeverityBadge from "./SeverityBadge";
 import { CVECharts } from "./ScanCharts";
+import CollapsibleTable from "./CollapsibleTable";
 
 const SOURCE_COLORS = {
   NVD:       { bg: "#1f3c5e", fg: "#58a6ff" },
@@ -43,7 +44,7 @@ function ExploitLinks({ exploits }) {
   );
 }
 
-export default function CVEResults({ data }) {
+export default function CVEResults({ data, collapsibleTables = false }) {
   const [sourceFilter, setSourceFilter] = useState("all");
   if (!data) return null;
 
@@ -96,47 +97,92 @@ export default function CVEResults({ data }) {
         correlations.map((entry, i) => {
           const filtered = filterCves(entry.cves);
           if (filtered.length === 0) return null;
+          const serviceLabel = [entry.service, entry.version].filter(Boolean).join(" ");
+          const tableTitle = `Port ${entry.port}${serviceLabel ? ` — ${serviceLabel}` : ""}`;
           return (
             <div key={i} style={{ marginBottom: "1.25rem" }}>
-              <p style={{ fontSize: ".85rem", color: "var(--muted)", marginBottom: ".5rem" }}>
-                Port <code>{entry.port}</code> — {entry.service} {entry.version}
-                <span style={{ marginLeft: 8, color: "var(--fg)", fontSize: ".75rem" }}>
-                  ({filtered.length} result{filtered.length !== 1 ? "s" : ""})
-                </span>
-              </p>
-              <div className="tbl-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Source</th>
-                      <th>Severity</th>
-                      <th>Score</th>
-                      <th>Description</th>
-                      <th>Exploits</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((cve, j) => (
-                      <tr key={j}>
-                        <td>
-                          <a href={(cve.references || [])[0] || `https://nvd.nist.gov/vuln/detail/${cve.cve_id}`}
-                             target="_blank" rel="noreferrer" style={{ whiteSpace: "nowrap" }}>
-                            {cve.cve_id}
-                          </a>
-                        </td>
-                        <td><SourceBadge source={cve.source || "NVD"} /></td>
-                        <td><SeverityBadge severity={cve.severity} /></td>
-                        <td>{cve.score}</td>
-                        <td style={{ maxWidth: 340, wordBreak: "break-word", fontSize: ".8rem" }}>
-                          {cve.description}
-                        </td>
-                        <td><ExploitLinks exploits={cve.exploits} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {collapsibleTables ? (
+                <CollapsibleTable
+                  title={tableTitle}
+                  countLabel={`${filtered.length} result${filtered.length !== 1 ? "s" : ""}`}
+                >
+                  <div className="tbl-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Source</th>
+                          <th>Severity</th>
+                          <th>Score</th>
+                          <th>Description</th>
+                          <th>Exploits</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((cve, j) => (
+                          <tr key={j}>
+                            <td>
+                              <a href={(cve.references || [])[0] || `https://nvd.nist.gov/vuln/detail/${cve.cve_id}`}
+                                 target="_blank" rel="noreferrer" style={{ whiteSpace: "nowrap" }}>
+                                {cve.cve_id}
+                              </a>
+                            </td>
+                            <td><SourceBadge source={cve.source || "NVD"} /></td>
+                            <td><SeverityBadge severity={cve.severity} /></td>
+                            <td>{cve.score}</td>
+                            <td style={{ maxWidth: 340, wordBreak: "break-word", fontSize: ".8rem" }}>
+                              {cve.description}
+                            </td>
+                            <td><ExploitLinks exploits={cve.exploits} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CollapsibleTable>
+              ) : (
+                <>
+                  <p style={{ fontSize: ".85rem", color: "var(--muted)", marginBottom: ".5rem" }}>
+                    Port <code>{entry.port}</code> — {entry.service} {entry.version}
+                    <span style={{ marginLeft: 8, color: "var(--fg)", fontSize: ".75rem" }}>
+                      ({filtered.length} result{filtered.length !== 1 ? "s" : ""})
+                    </span>
+                  </p>
+                  <div className="tbl-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Source</th>
+                          <th>Severity</th>
+                          <th>Score</th>
+                          <th>Description</th>
+                          <th>Exploits</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((cve, j) => (
+                          <tr key={j}>
+                            <td>
+                              <a href={(cve.references || [])[0] || `https://nvd.nist.gov/vuln/detail/${cve.cve_id}`}
+                                 target="_blank" rel="noreferrer" style={{ whiteSpace: "nowrap" }}>
+                                {cve.cve_id}
+                              </a>
+                            </td>
+                            <td><SourceBadge source={cve.source || "NVD"} /></td>
+                            <td><SeverityBadge severity={cve.severity} /></td>
+                            <td>{cve.score}</td>
+                            <td style={{ maxWidth: 340, wordBreak: "break-word", fontSize: ".8rem" }}>
+                              {cve.description}
+                            </td>
+                            <td><ExploitLinks exploits={cve.exploits} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
           );
         })

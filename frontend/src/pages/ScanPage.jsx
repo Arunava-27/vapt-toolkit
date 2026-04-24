@@ -20,6 +20,7 @@ const DEFAULT_CONFIG = {
   port_extra_flags: "",
   web_depth: 1,
   recon_wordlist: "subdomains-top5000.txt",
+  scan_classification: "active",
 };
 
 const LEVEL_ICON = { error: "🚫", warning: "⚠️", info: "ℹ️" };

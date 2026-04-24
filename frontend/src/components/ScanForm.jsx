@@ -40,6 +40,12 @@ const WEB_DEPTHS = [
 
 const WEB_EST = { 1: "~10s", 2: "~30s", 3: "~2 min" };
 
+const SCAN_CLASSIFICATIONS = [
+  { value: "passive", label: "🔍 Passive", desc: "OSINT + DNS lookup only. NO packets sent, NO port scanning, NO HTTP probing." },
+  { value: "active",  label: "⚡ Active", desc: "Port scanning + web probing + service enumeration. INTRUSIVE." },
+  { value: "hybrid",  label: "🎯 Hybrid", desc: "All modules · deepest analysis. MOST INTRUSIVE." },
+];
+
 function Toggle({ label, sub, icon, active, onChange, disabled }) {
   return (
     <div className={`module-check${active ? " active" : ""}`}
@@ -58,7 +64,15 @@ function Toggle({ label, sub, icon, active, onChange, disabled }) {
 }
 
 export default function ScanForm({ config, onChange, onScan, scanning }) {
-  const modules = [
+  const set = (patch) => onChange({ ...config, ...patch });
+
+  const classification = config.scan_classification || "active";
+  const isPassive = classification === "passive";
+  const isActive = classification === "active";
+  const isHybrid = classification === "hybrid";
+
+  // For hybrid, show all modules; for passive, only recon+cve; for active, only ports+web+cve
+  const allModules = [
     { key: "recon",     icon: "🔍", label: "Recon",      desc: "Subdomain enumeration" },
     { key: "ports",     icon: "🚪", label: "Port Scan",  desc: "Nmap port & service scan" },
     { key: "cve",       icon: "🐛", label: "CVE Lookup", desc: "NVD API correlation" },
@@ -66,7 +80,15 @@ export default function ScanForm({ config, onChange, onScan, scanning }) {
     { key: "full_scan", icon: "⚡", label: "Full Scan",  desc: "All modules above" },
   ];
 
-  const set = (patch) => onChange({ ...config, ...patch });
+  // Filter modules based on scan classification
+  let modules;
+  if (isPassive) {
+    modules = allModules.filter(m => ["recon", "cve"].includes(m.key));
+  } else if (isActive) {
+    modules = allModules.filter(m => ["ports", "cve", "web"].includes(m.key));
+  } else {
+    modules = allModules; // hybrid shows all
+  }
 
   const toggle = (key) => {
     if (key === "full_scan") {
@@ -93,6 +115,65 @@ export default function ScanForm({ config, onChange, onScan, scanning }) {
           value={config.target} disabled={scanning}
           onChange={(e) => set({ target: e.target.value })} />
       </div>
+
+      <h2>Scan Type</h2>
+      <div className="classification-options">
+        {SCAN_CLASSIFICATIONS.map((c) => (
+          <div key={c.value}
+               className={`classification-opt${config.scan_classification === c.value ? " active" : ""}`}
+               onClick={() => !scanning && set({ scan_classification: c.value })}>
+            <strong>{c.label}</strong>
+            <span>{c.desc}</span>
+          </div>
+        ))}
+      </div>
+
+      {isPassive && (
+        <div className="scan-constraint-notice">
+          <strong>🔒 Passive Scan Constraints:</strong>
+          <ul>
+            <li>✓ Public data sources only (OSINT APIs, Certificate Transparency, DNS queries)</li>
+            <li>✓ NO direct packet transmission</li>
+            <li>✓ NO port scanning (Nmap disabled)</li>
+            <li>✓ NO HTTP probing (Web scanner disabled)</li>
+            <li>✗ CVE lookups limited to OSINT recon data</li>
+          </ul>
+        </div>
+      )}
+
+      {isActive && (
+        <div className="scan-constraint-notice active">
+          <strong>⚡ Active Scan Constraints:</strong>
+          <ul>
+            <li>✓ Only authorized targets in scope</li>
+            <li>✓ Rate-limited to avoid DoS</li>
+            <li>✓ Safe PoC payloads only (no data modification)</li>
+            <li>✓ All requests logged for audit trail</li>
+            <li>✓ Respects robots.txt by default</li>
+          </ul>
+        </div>
+      )}
+
+      {/* ── Scope for active scans ── */}
+      {isActive && (
+        <div className="settings-block">
+          <label className="settings-label">Authorized Scope (optional)</label>
+          <textarea
+            className="scope-textarea"
+            placeholder="example.com&#10;192.168.1.0/24&#10;https://api.example.com"
+            value={config.scope ? config.scope.join('\n') : ''}
+            disabled={scanning}
+            onChange={(e) => {
+              const lines = e.target.value.trim().split('\n').filter(l => l.trim());
+              set({ scope: lines.length > 0 ? lines : null });
+            }}
+          />
+          <p className="scope-hint">One target per line. Leave empty to allow any target.</p>
+          {config.scope && config.scope.length > 0 && (
+            <p className="scope-active">🔒 In-scope: {config.scope.join(', ')}</p>
+          )}
+        </div>
+      )}
 
       <h2>Modules</h2>
       <div className="modules">

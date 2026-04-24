@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import ResultsDashboard from "../components/ResultsDashboard";
 
 function fmt(iso) {
@@ -11,15 +11,15 @@ function fmt(iso) {
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [project, setProject]   = useState(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
+  const [selectedScanIdx, setSelectedScanIdx] = useState(-1);  // -1 = latest
 
   useEffect(() => {
     fetch(`/api/projects/${id}`)
       .then((r) => { if (!r.ok) throw new Error("Not found"); return r.json(); })
-      .then((data) => { setProject(data); setLoading(false); })
+      .then((data) => { setProject(data); setLoading(false); setSelectedScanIdx(-1); })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [id]);
 
@@ -36,7 +36,10 @@ export default function ProjectDetailPage() {
   if (loading) return <div className="main"><p className="none-msg">Loading…</p></div>;
   if (error)   return <div className="main"><p className="none-msg">Error: {error}</p></div>;
 
-  const cfg = project.config || {};
+  const scans = project.scans || [];
+  const currentScan = selectedScanIdx === -1 ? scans[scans.length - 1] : scans[selectedScanIdx];
+  const cfg = currentScan?.config || {};
+  const results = currentScan?.results || {};
 
   return (
     <div className="detail-page">
@@ -48,6 +51,19 @@ export default function ProjectDetailPage() {
             <span className="badge-count">{fmt(project.created_at)}</span>
           </div>
           <p className="detail-target">🎯 {project.target}</p>
+          {scans.length > 1 && (
+            <div className="detail-scan-selector">
+              <label>📋 Scan History:</label>
+              <select value={selectedScanIdx} onChange={(e) => setSelectedScanIdx(parseInt(e.target.value))}>
+                <option value={-1}>Latest ({fmt(scans[scans.length - 1]?.timestamp)})</option>
+                {scans.map((scan, idx) => (
+                  <option key={idx} value={idx}>
+                    Scan #{scans.length - idx} — {fmt(scan.timestamp)} ({scan.scan_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="detail-config">
             {cfg.full_scan && <span className="cfg-tag">⚡ Full Scan</span>}
             {cfg.recon     && <span className="cfg-tag">🔍 Recon</span>}
@@ -67,7 +83,7 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <ResultsDashboard results={project.results} />
+      <ResultsDashboard results={results} collapsibleTables />
     </div>
   );
 }

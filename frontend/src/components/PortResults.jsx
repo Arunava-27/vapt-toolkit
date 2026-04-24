@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PortCharts } from "./ScanCharts";
+import CollapsibleTable from "./CollapsibleTable";
 
 function ProtoTag({ proto }) {
   return (
@@ -30,7 +31,7 @@ function ScriptOutput({ scripts }) {
   );
 }
 
-export default function PortResults({ data }) {
+export default function PortResults({ data, collapsibleTables = false }) {
   if (!data) return null;
   const ports    = data.open_ports  || [];
   const os       = data.os_info     || {};
@@ -91,6 +92,40 @@ export default function PortResults({ data }) {
       {/* ── Ports table ── */}
       {ports.length === 0 ? (
         <p className="none-msg">No open ports found.</p>
+      ) : collapsibleTables ? (
+        <CollapsibleTable title="Open Ports" countLabel={`${ports.length} row${ports.length !== 1 ? "s" : ""}`}>
+          <div className="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Port</th>
+                  <th>Proto</th>
+                  <th>Service</th>
+                  <th>Product / Version</th>
+                  <th>Extra Info</th>
+                  <th>CPE</th>
+                  <th>Scripts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ports.map((p, i) => (
+                  <tr key={i}>
+                    <td><code>{p.port}</code></td>
+                    <td><ProtoTag proto={p.proto} /></td>
+                    <td>{p.service || "—"}</td>
+                    <td>
+                      {[p.product, p.version].filter(Boolean).join(" ") || "—"}
+                      {p.extrainfo && <span className="extra-info"> ({p.extrainfo})</span>}
+                    </td>
+                    <td><span className="extra-info">{p.extrainfo || "—"}</span></td>
+                    <td>{p.cpe ? <code className="cpe-tag">{p.cpe}</code> : "—"}</td>
+                    <td><ScriptOutput scripts={p.scripts} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleTable>
       ) : (
         <div className="tbl-wrap">
           <table>

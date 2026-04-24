@@ -7,11 +7,13 @@ Enhanced port scanner — python-nmap wrapper with:
   • -Pn skip-ping option for firewalled hosts
   • Per-port: proto, state, product, version, extrainfo, CPE, confidence, script output
   • Host-level: hostname, MAC, vendor, traceroute hops
+  • WSL support: auto-detects and uses WSL nmap on Windows
 """
 import nmap
 import os
 import signal
 from typing import Optional
+from wsl_config import wsl
 
 # ── Presets ───────────────────────────────────────────────────────────────────
 
@@ -133,7 +135,26 @@ class PortScanner:
     def run(self) -> dict:
         if self._stopped:
             return {"target": self.target, "host_info": {}, "os_info": {}, "open_ports": [], "traceroute": [], "scan_args": ""}
-        nm = nmap.PortScanner()
+        
+        # Check if nmap is available (including WSL)
+        if not wsl.nmap_path:
+            return {
+                "target": self.target,
+                "host_info": {},
+                "os_info": {},
+                "open_ports": [],
+                "traceroute": [],
+                "scan_args": "",
+                "error": f"Nmap not found. Install with: apt install nmap (WSL) or choco install nmap (Windows)"
+            }
+        
+        # Create nmap scanner with WSL nmap path if needed
+        try:
+            nm = nmap.PortScanner(nmap_search_path=[wsl.nmap_path] if wsl.nmap_path else None)
+        except Exception:
+            # Fallback to default nmap discovery
+            nm = nmap.PortScanner()
+        
         self._nm = nm
         args, ports_arg = self._build_args()
         nm.scan(self.target, ports_arg, arguments=args)

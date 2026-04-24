@@ -11,3 +11,5 @@ frontend/dist/
 # Large wordlist files — download via scanner/recon.py:download_wordlists()
 wordlists/subdomains-top5000.txt
 wordlists/subdomains-top20000.txt
+
+CLAUDE.*
