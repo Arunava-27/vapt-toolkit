@@ -1,0 +1,100 @@
+version: '3.9'
+
+services:
+  # VAPT Web API Service (FastAPI backend)
+  vapt-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vapt-web
+    ports:
+      - "${VAPT_PORT:-8000}:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///vapt.db}
+      - API_KEY_SECRET=${API_KEY_SECRET:-change-me-in-production}
+      - TARGET_URL=${TARGET_URL:-http://localhost:3000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - VAPT_PORT=8000
+      # Notification settings
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL:-}
+    volumes:
+      # Database persistence
+      - vapt-db-data:/app
+      # Scan results persistence
+      - vapt-scans:/app/scans
+      # Reports persistence
+      - vapt-reports:/app/reports
+      # Logs persistence
+      - vapt-logs:/app/logs
+    networks:
+      - vapt-network
+    depends_on:
+      - vapt-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "com.example.description=VAPT Toolkit API Server"
+
+  # SQLite Database Service (file-based)
+  vapt-db:
+    image: busybox:latest
+    container_name: vapt-db
+    command: sh -c "while true; do sleep 1000; done"
+    volumes:
+      - vapt-db-data:/app
+    networks:
+      - vapt-network
+    restart: unless-stopped
+    labels:
+      - "com.example.description=VAPT Database Volume Manager"
+
+  # React Frontend Service
+  vapt-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vapt-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+      - NODE_ENV=${NODE_ENV:-production}
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - vapt-network
+    depends_on:
+      - vapt-web
+    restart: unless-stopped
+    labels:
+      - "com.example.description=VAPT Toolkit Frontend"
+
+volumes:
+  vapt-db-data:
+    driver: local
+  vapt-scans:
+    driver: local
+  vapt-reports:
+    driver: local
+  vapt-logs:
+    driver: local
+
+networks:
+  vapt-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

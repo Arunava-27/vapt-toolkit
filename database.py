@@ -89,6 +89,35 @@ def init_db():
                     updated_at  TEXT
                 )
             """)
+        
+        # Create api_keys table if not exists
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id          TEXT PRIMARY KEY,
+                project_id  TEXT NOT NULL,
+                key_hash    TEXT NOT NULL UNIQUE,
+                created_at  TEXT NOT NULL,
+                last_used   TEXT,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+        """)
+        
+        # Create schedules table if not exists
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS schedules (
+                id          TEXT PRIMARY KEY,
+                project_id  TEXT NOT NULL,
+                frequency   TEXT NOT NULL,
+                time        TEXT NOT NULL,
+                day_of_week INTEGER,
+                enabled     BOOLEAN DEFAULT 1,
+                last_run    TEXT,
+                next_run    TEXT,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+        """)
 
 
 # ── Write ─────────────────────────────────────────────────────────────────────
@@ -240,3 +269,68 @@ def get_project(pid: str) -> dict | None:
         "scan_count": len(scans),
         "scans":      scans,  # Full scan history available
     }
+
+# ── Schedule Management ───────────────────────────────────────────────────────
+
+def create_schedule(schedule_data: dict) -> str:
+    """Create a new schedule."""
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO schedules (id, project_id, frequency, time, day_of_week, enabled, last_run, next_run, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (schedule_data["id"], schedule_data["project_id"], schedule_data["frequency"],
+             schedule_data["time"], schedule_data.get("day_of_week"), schedule_data.get("enabled", True),
+             schedule_data.get("last_run"), schedule_data["next_run"],
+             schedule_data["created_at"], schedule_data.get("updated_at"))
+        )
+    return schedule_data["id"]
+
+
+def list_schedules() -> list:
+    """List all schedules."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, project_id, frequency, time, day_of_week, enabled, last_run, next_run, created_at, updated_at "
+            "FROM schedules ORDER BY created_at DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_schedule(schedule_id: str) -> dict | None:
+    """Get schedule by ID."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT id, project_id, frequency, time, day_of_week, enabled, last_run, next_run, created_at, updated_at "
+            "FROM schedules WHERE id=?", (schedule_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_schedule(schedule_id: str, updates: dict):
+    """Update a schedule."""
+    # Filter to only valid columns
+    valid_columns = {"frequency", "time", "day_of_week", "enabled", "last_run", "next_run", "updated_at"}
+    filtered = {k: v for k, v in updates.items() if k in valid_columns}
+    
+    if not filtered:
+        return
+    
+    with _conn() as c:
+        fields = ", ".join(f"{k}=?" for k in filtered.keys())
+        values = list(filtered.values()) + [schedule_id]
+        c.execute(f"UPDATE schedules SET {fields} WHERE id=?", values)
+
+
+def update_schedule_run(schedule_id: str, last_run: str):
+    """Update last_run for a schedule."""
+    with _conn() as c:
+        c.execute(
+            "UPDATE schedules SET last_run=? WHERE id=?",
+            (last_run, schedule_id)
+        )
+
+
+def delete_schedule(schedule_id: str):
+    """Delete a schedule."""
+    with _conn() as c:
+        c.execute("DELETE FROM schedules WHERE id=?", (schedule_id,))

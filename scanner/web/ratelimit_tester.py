@@ -14,6 +14,7 @@ from enum import Enum
 import requests
 import logging
 from collections import defaultdict
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,23 @@ class BruteForceTester:
                 "attempts_made": attempt + 1,
                 "evidence": f"Sent {attempt + 1} login attempts without rate limiting",
             }
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "Rate Limiting",
+                ["no_rate_limit_header"],
+                {"no_throttle_detected": True},
+                {"reproducible": True}
+            )
+            finding.update({
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "detection_methods": ["no_rate_limit_header"],
+                "verification_steps": ConfidenceScorer.get_verification_hints(
+                    "Rate Limiting", endpoint_url, "password", "no_rate_limit_header"
+                ),
+                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                    "Rate Limiting", ["no_rate_limit_header"], conf_score
+                ),
+            })
             findings.append(finding)
 
         if successful_attempts > 0:
@@ -191,6 +209,23 @@ class BruteForceTester:
                 "successful_attempts": successful_attempts,
                 "evidence": f"Found {successful_attempts} working password(s) in brute force",
             }
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "Authentication",
+                ["threshold_exceeded"],
+                {"credentials_valid": True},
+                {"response_status": "unexpected", "reproducible": True}
+            )
+            finding.update({
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "detection_methods": ["threshold_exceeded"],
+                "verification_steps": ConfidenceScorer.get_verification_hints(
+                    "Authentication", endpoint_url, "password", "threshold_exceeded"
+                ),
+                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                    "Authentication", ["threshold_exceeded"], conf_score
+                ),
+            })
             findings.append(finding)
 
         return findings
@@ -253,6 +288,23 @@ class BruteForceTester:
                 "attempts_before_limit": attempts_before_limit,
                 "evidence": f"Attempted {attempts_before_limit} OTPs without rate limiting",
             }
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "Rate Limiting",
+                ["no_rate_limit_header"],
+                {"no_throttle_detected": True},
+                {"reproducible": True}
+            )
+            finding.update({
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "detection_methods": ["no_rate_limit_header"],
+                "verification_steps": ConfidenceScorer.get_verification_hints(
+                    "Rate Limiting", endpoint_url, otp_param, "no_rate_limit_header"
+                ),
+                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                    "Rate Limiting", ["no_rate_limit_header"], conf_score
+                ),
+            })
             findings.append(finding)
 
         return findings
@@ -349,6 +401,23 @@ class APIRateLimitTester:
                         "bypass_technique": str(headers),
                         "evidence": f"Rate limit bypassed using: {headers}",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Rate Limiting",
+                        ["threshold_exceeded"],
+                        {"bypass_successful": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["threshold_exceeded"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Rate Limiting", endpoint_url, "headers", "threshold_exceeded"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Rate Limiting", ["threshold_exceeded"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     logger.warning(f"Rate limit bypass found: {headers}")
 

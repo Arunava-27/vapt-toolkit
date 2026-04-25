@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import ResultsDashboard from "../components/ResultsDashboard";
+import "../App-compliance.css";
 
 function fmt(iso) {
   return new Date(iso).toLocaleString(undefined, {

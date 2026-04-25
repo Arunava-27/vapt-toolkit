@@ -2,6 +2,7 @@ import ReconResults from "./ReconResults";
 import PortResults from "./PortResults";
 import CVEResults from "./CVEResults";
 import WebResults from "./WebResults";
+import ComplianceReport from "./ComplianceReport";
 
 export default function ResultsDashboard({
   results,
@@ -9,6 +10,10 @@ export default function ResultsDashboard({
   collapsibleTables = false,
 }) {
   if (!results || !Object.keys(results).length) return null;
+
+  // Extract web vulnerability findings for compliance report
+  const web_vulnerabilities = results?.web_vulnerabilities?.findings || [];
+
   return (
     <div id={id}>
       <div className="summary-cards">
@@ -29,6 +34,15 @@ export default function ResultsDashboard({
           <div className="lbl">Web Findings</div>
         </div>
       </div>
+
+      {/* Compliance Report (appears before detailed results) */}
+      {web_vulnerabilities.length > 0 && (
+        <div className="section-wrapper">
+          <h2 style={{ marginTop: "2rem", marginBottom: "1rem" }}>🛡️ Compliance & Standards</h2>
+          <ComplianceReport findings={web_vulnerabilities} />
+        </div>
+      )}
+
       <ReconResults data={results.recon} collapsibleTables={collapsibleTables} />
       <PortResults  data={results.ports} collapsibleTables={collapsibleTables} />
       <CVEResults   data={results.cve} collapsibleTables={collapsibleTables} />

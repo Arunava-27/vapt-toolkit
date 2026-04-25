@@ -12,6 +12,7 @@ import requests
 import logging
 from urllib.parse import urljoin, urlparse
 import mimetypes
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,23 @@ class FileHandlingTester:
                     # Upload succeeded
                     finding = self._analyze_upload_response(response, payload, endpoint_url, file_field_name)
                     if finding:
+                        conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                            "File Upload",
+                            ["file_upload"],
+                            {"upload_success": True},
+                            {"response_status": "unexpected", "reproducible": True}
+                        )
+                        finding.update({
+                            "confidence_score": conf_score,
+                            "confidence_level": conf_level,
+                            "detection_methods": ["file_upload"],
+                            "verification_steps": ConfidenceScorer.get_verification_hints(
+                                "File Upload", endpoint_url, file_field_name, "file_upload"
+                            ),
+                            "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                                "File Upload", ["file_upload"], conf_score
+                            ),
+                        })
                         findings.append(finding)
                         logger.warning(f"File upload vulnerability detected: {payload.description}")
 
@@ -167,6 +185,23 @@ class FileHandlingTester:
                         "evidence": f"File uploaded successfully: {stored_path}",
                         "status_code": response.status_code,
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "File Upload",
+                        ["file_upload"],
+                        {"file_detected": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["file_upload"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "File Upload", endpoint_url, file_field_name, "file_upload"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "File Upload", ["file_upload"], conf_score
+                        ),
+                    })
                     findings.append(finding)
 
             except requests.RequestException as e:
@@ -217,6 +252,23 @@ class FileHandlingTester:
                         "description": description,
                         "evidence": f"File content retrieved: {response.text[:100]}...",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Path Traversal",
+                        ["file_upload"],
+                        {"file_content_detected": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["file_upload"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Path Traversal", endpoint_url, parameter_name, "file_upload"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Path Traversal", ["file_upload"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     logger.warning(f"Path traversal found: {path}")
 
@@ -387,6 +439,23 @@ class SecurityMisconfigurationTester:
                         "description": description,
                         "evidence": f"Header '{header_name}' not present",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Security Misconfiguration",
+                        ["default_value"],
+                        {"header_missing": True},
+                        {"reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["default_value"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Security Misconfiguration", url, header_name, "default_value"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Security Misconfiguration", ["default_value"], conf_score
+                        ),
+                    })
                     findings.append(finding)
 
         except requests.RequestException as e:
@@ -415,6 +484,23 @@ class SecurityMisconfigurationTester:
                         "url": test_url,
                         "evidence": "Server exposes directory contents",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Security Misconfiguration",
+                        ["default_value"],
+                        {"directory_listing_detected": True},
+                        {"reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["default_value"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Security Misconfiguration", test_url, "directory", "default_value"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Security Misconfiguration", ["default_value"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     logger.warning(f"Directory listing found: {test_url}")
 
@@ -451,6 +537,23 @@ class SecurityMisconfigurationTester:
                         "status_code": response.status_code,
                         "evidence": f"Debug endpoint accessible at {path}",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Security Misconfiguration",
+                        ["debug_enabled"],
+                        {"endpoint_accessible": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["debug_enabled"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Security Misconfiguration", test_url, "debug_endpoint", "debug_enabled"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Security Misconfiguration", ["debug_enabled"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     logger.warning(f"Debug endpoint found: {test_url}")
 
@@ -491,6 +594,23 @@ class SecurityMisconfigurationTester:
                             "password": password,
                             "evidence": f"Login successful with {username}:{password}",
                         }
+                        conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                            "Authentication",
+                            ["default_value"],
+                            {"credentials_accepted": True},
+                            {"response_status": "unexpected", "reproducible": True}
+                        )
+                        finding.update({
+                            "confidence_score": conf_score,
+                            "confidence_level": conf_level,
+                            "detection_methods": ["default_value"],
+                            "verification_steps": ConfidenceScorer.get_verification_hints(
+                                "Authentication", test_url, "credentials", "default_value"
+                            ),
+                            "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                                "Authentication", ["default_value"], conf_score
+                            ),
+                        })
                         findings.append(finding)
                         logger.warning(f"Default credentials found: {username}:{password}")
 

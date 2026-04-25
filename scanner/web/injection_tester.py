@@ -12,6 +12,7 @@ from .payloads import (
 from .detectors import ResponseAnalyzer
 from .web_logger import WebVulnerabilityLogger, HTTPRequest, HTTPResponse
 from .surface_mapper import Endpoint, Parameter
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 
 class InjectionTester:
@@ -101,7 +102,28 @@ class InjectionTester:
                     request=self.logger.capture_request("GET", modified_url, headers),
                     response=self.logger.capture_response(status, headers, body, resp_time),
                 )
-                return finding.to_dict()
+                
+                # Calculate confidence
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "SQL Injection",
+                    ["error_based"],
+                    {"error_detection": True},
+                    {"response_status": "unexpected", "reproducible": True}
+                )
+                
+                finding_dict = finding.to_dict()
+                finding_dict.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["error_based"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "SQL Injection", endpoint.url, param_name, "error_based"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "SQL Injection", ["error_based"], conf_score
+                    ),
+                })
+                return finding_dict
         
         # Test time-based blind SQLi
         baseline_url = self._inject_url_param(endpoint.url, param_name, "1")
@@ -121,7 +143,28 @@ class InjectionTester:
                     payload=payload,
                     evidence=f"Response delay: {resp_time:.2f}s vs baseline {baseline_time:.2f}s",
                 )
-                return finding.to_dict()
+                
+                # Calculate confidence
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "SQL Injection",
+                    ["time_based"],
+                    {"timing_detection": True},
+                    {"response_status": "unexpected", "reproducible": True}
+                )
+                
+                finding_dict = finding.to_dict()
+                finding_dict.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["time_based"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "SQL Injection", endpoint.url, param_name, "time_based"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "SQL Injection", ["time_based"], conf_score
+                    ),
+                })
+                return finding_dict
         
         return None
     
@@ -173,7 +216,28 @@ class InjectionTester:
                     payload=payload,
                     evidence=f"{db_type} detected: {signature}",
                 )
-                return finding.to_dict()
+                
+                # Calculate confidence
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "SQL Injection",
+                    ["error_based"],
+                    {"error_detection": True},
+                    {"response_status": "unexpected", "reproducible": True}
+                )
+                
+                finding_dict = finding.to_dict()
+                finding_dict.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["error_based"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "SQL Injection", form_action, field_name, "error_based"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "SQL Injection", ["error_based"], conf_score
+                    ),
+                })
+                return finding_dict
         
         return None
     
@@ -212,7 +276,28 @@ class InjectionTester:
                     payload=payload,
                     evidence=f"{os_type} command execution detected",
                 )
-                return finding.to_dict()
+                
+                # Calculate confidence
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "Injection",
+                    ["command_execution"],
+                    {"command_detection": True},
+                    {"response_status": "unexpected", "payload_complexity": "complex"}
+                )
+                
+                finding_dict = finding.to_dict()
+                finding_dict.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["command_execution"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "Injection", endpoint.url, param_name, "command_execution"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "Injection", ["command_execution"], conf_score
+                    ),
+                })
+                return finding_dict
         
         return None
     
@@ -251,7 +336,28 @@ class InjectionTester:
                     payload=payload,
                     evidence="NoSQL error or type error detected in response",
                 )
-                return finding.to_dict()
+                
+                # Calculate confidence
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "Injection",
+                    ["error_detection"],
+                    {"error_detection": True},
+                    {"response_status": "unexpected"}
+                )
+                
+                finding_dict = finding.to_dict()
+                finding_dict.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["error_detection"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "Injection", endpoint.url, param_name, "error_detection"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "Injection", ["error_detection"], conf_score
+                    ),
+                })
+                return finding_dict
         
         return None
     
@@ -293,7 +399,28 @@ class InjectionTester:
                     payload=payload,
                     evidence="LDAP error detected in response",
                 )
-                return finding.to_dict()
+                
+                # Calculate confidence
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "Injection",
+                    ["error_detection"],
+                    {"error_detection": True},
+                    {"response_status": "unexpected"}
+                )
+                
+                finding_dict = finding.to_dict()
+                finding_dict.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["error_detection"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "Injection", endpoint.url, param_name, "error_detection"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "Injection", ["error_detection"], conf_score
+                    ),
+                })
+                return finding_dict
         
         return None
     

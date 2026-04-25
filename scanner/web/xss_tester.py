@@ -15,6 +15,7 @@ import time
 import requests
 from urllib.parse import urlencode, quote, unquote
 import logging
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -514,6 +515,37 @@ class XSSTester:
                             dict(response.headers)
                         )
 
+                        # Determine detection methods based on what was detected
+                        detection_methods = []
+                        detection_results = {}
+                        
+                        # Check for marker reflection
+                        if payload_obj.marker in response.text:
+                            detection_methods.append("marker_reflected")
+                            detection_results["marker_reflected"] = True
+                        
+                        # Check for unescaped markup
+                        if payload_obj.payload in response.text:
+                            detection_methods.append("markup_found")
+                            detection_results["markup_found"] = True
+                        
+                        # Default to marker if no specific detection found
+                        if not detection_methods:
+                            detection_methods = ["marker_reflected"]
+                            detection_results["marker_reflected"] = True
+                        
+                        # Calculate confidence score
+                        conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                            "Cross-Site Scripting",
+                            detection_methods,
+                            detection_results,
+                            {
+                                "response_status": "unexpected",
+                                "reproducible": True,
+                                "payload_complexity": "complex" if any(c in payload_obj.payload for c in ['%', '\\', '"']) else "normal"
+                            }
+                        )
+
                         finding = {
                             "type": "Reflected XSS" if "reflected" in str(payload_obj.description).lower() else "XSS",
                             "severity": "Critical" if not csp_present else "High",
@@ -527,9 +559,18 @@ class XSSTester:
                             "csp_status": csp_desc,
                             "response_snippet": response.text[:200],
                             "status_code": response.status_code,
+                            "confidence_score": conf_score,
+                            "confidence_level": conf_level,
+                            "detection_methods": detection_methods,
+                            "verification_steps": ConfidenceScorer.get_verification_hints(
+                                "Cross-Site Scripting", url, parameter_name, "_".join(detection_methods)
+                            ),
+                            "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                                "Cross-Site Scripting", detection_methods, conf_score
+                            ),
                         }
                         findings.append(finding)
-                        logger.info(f"XSS vulnerability found: {parameter_name} @ {url}")
+                        logger.info(f"XSS vulnerability found: {parameter_name} @ {url} (Confidence: {conf_level})")
 
                 except requests.RequestException as e:
                     logger.debug(f"Error testing payload: {e}")
@@ -618,6 +659,23 @@ class XSSTester:
                     for sink in sink_patterns:
                         if re.search(sink, response.text):
                             # Both source and sink present
+                            detection_methods = ["dom_based"]
+                            detection_results = {
+                                "source_detected": True,
+                                "sink_detected": True
+                            }
+                            
+                            # Calculate confidence score for DOM-based XSS
+                            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                                "Cross-Site Scripting",
+                                detection_methods,
+                                detection_results,
+                                {
+                                    "response_status": "unexpected",
+                                    "reproducible": False  # DOM vulnerabilities require runtime verification
+                                }
+                            )
+                            
                             finding = {
                                 "type": "DOM-based XSS (Potential)",
                                 "severity": "High",
@@ -626,7 +684,16 @@ class XSSTester:
                                 "evidence": "User input source detected with dangerous sink",
                                 "source_pattern": source,
                                 "sink_pattern": sink,
-                                "note": "Requires manual verification - automated DOM analysis is limited"
+                                "note": "Requires manual verification - automated DOM analysis is limited",
+                                "confidence_score": conf_score,
+                                "confidence_level": conf_level,
+                                "detection_methods": detection_methods,
+                                "verification_steps": ConfidenceScorer.get_verification_hints(
+                                    "Cross-Site Scripting", url, "source", "dom_based"
+                                ),
+                                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                                    "Cross-Site Scripting", detection_methods, conf_score
+                                ),
                             }
                             findings.append(finding)
                             break

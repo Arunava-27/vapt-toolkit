@@ -13,7 +13,23 @@ from enum import Enum
 from datetime import datetime
 import logging
 
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
+
 logger = logging.getLogger(__name__)
+
+# Lazy-load classifier to avoid circular imports
+_classifier = None
+
+def get_classifier():
+    """Lazy-load classifier to avoid circular imports."""
+    global _classifier
+    if _classifier is None:
+        try:
+            from scanner.web.vulnerability_classifier import VulnerabilityClassifier
+            _classifier = VulnerabilityClassifier
+        except ImportError:
+            _classifier = None
+    return _classifier
 
 
 class FindingSeverity(Enum):
@@ -67,15 +83,28 @@ class WebVulnerabilityFinding:
     response_headers: Dict[str, str] = field(default_factory=dict)
     evidence: str = ""  # Description of how vulnerability was found
     
+    # Confidence scoring
+    confidence_score: int = 50  # 0-100
+    confidence_level: str = "Low"  # High, Medium, Low, Suspicious
+    detection_methods: List[str] = field(default_factory=list)  # Methods used
+    verification_steps: List[str] = field(default_factory=list)  # Manual verification steps
+    false_positive_risk: float = 0.5  # 0-1, where 1 = likely FP
+    
     # Metadata
     module: str = ""  # Which module detected this
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     reproducible: bool = True
-    false_positive_risk: str = "Low"  # Low, Medium, High
     
     # Fingerprinting
     fingerprint: str = field(default="")  # Hash for deduplication
     related_findings: List[str] = field(default_factory=list)
+    
+    # Compliance & Standards
+    owasp_category: str = ""  # OWASP Top 10 2021 category
+    cwe_id: str = ""  # CWE (Common Weakness Enumeration) ID
+    cvss_score: float = 0.0  # CVSS v3.1 score (0-10)
+    remediation_tips: List[str] = field(default_factory=list)  # How to fix this vulnerability
+    compliance_impact: List[str] = field(default_factory=list)  # Affected standards (HIPAA, PCI-DSS, etc)
     
     def __post_init__(self):
         """Generate ID and fingerprint after initialization"""
@@ -83,6 +112,25 @@ class WebVulnerabilityFinding:
             self.finding_id = self._generate_id()
         if not self.fingerprint:
             self.fingerprint = self._generate_fingerprint()
+        
+        # Auto-populate compliance fields if classifier is available
+        if not self.owasp_category or not self.cwe_id:
+            classifier = get_classifier()
+            if classifier:
+                try:
+                    classification = classifier.classify(self.type)
+                    if not self.owasp_category:
+                        self.owasp_category = classification.get("owasp_category", "")
+                    if not self.cwe_id:
+                        self.cwe_id = classification.get("cwe_id", "")
+                    if not self.remediation_tips:
+                        self.remediation_tips = classifier.get_remediation_tips(self.type)
+                    if not self.compliance_impact:
+                        self.compliance_impact = classifier.get_compliance_impact(self.type)
+                    if self.cvss_score == 0.0:
+                        self.cvss_score = classifier._estimate_score_from_severity(self.severity)
+                except Exception as e:
+                    logger.debug(f"Failed to auto-populate compliance fields: {e}")
     
     def _generate_id(self) -> str:
         """Generate unique finding ID"""
@@ -189,7 +237,11 @@ class EvidenceCollector:
                 evidence=finding_data.get("evidence", ""),
                 module=module,
                 reproducible=finding_data.get("reproducible", True),
-                false_positive_risk=finding_data.get("false_positive_risk", "Low"),
+                confidence_score=finding_data.get("confidence_score", 50),
+                confidence_level=finding_data.get("confidence_level", "Low"),
+                detection_methods=finding_data.get("detection_methods", []),
+                verification_steps=finding_data.get("verification_steps", []),
+                false_positive_risk=finding_data.get("false_positive_risk", 0.5),
             )
             
             return finding
@@ -221,8 +273,18 @@ class EvidenceCollector:
             "by_severity": {},
             "by_type": {},
             "by_module": self.module_stats,
+            "by_confidence_level": {
+                "High": len(self.get_by_confidence_level("High")),
+                "Medium": len(self.get_by_confidence_level("Medium")),
+                "Low": len(self.get_by_confidence_level("Low")),
+                "Suspicious": len(self.get_by_confidence_level("Suspicious")),
+            },
             "reproducible_count": sum(1 for f in self.findings if f.reproducible),
             "high_confidence_count": sum(1 for f in self.findings if f.severity in ["Critical", "High"]),
+            "average_confidence_score": (
+                int(sum(f.confidence_score for f in self.findings) / len(self.findings))
+                if self.findings else 0
+            ),
         }
         
         # Count by severity
@@ -266,6 +328,62 @@ class EvidenceCollector:
             logger.info(f"Deduplicated {removed} duplicate findings")
         
         return removed
+    
+    def filter_by_confidence(self, min_confidence: int = 50) -> List[WebVulnerabilityFinding]:
+        """
+        Filter findings by minimum confidence threshold.
+        
+        Args:
+            min_confidence: Minimum confidence score (0-100, default 50)
+            
+        Returns:
+            List of findings meeting confidence threshold
+        """
+        return [f for f in self.findings if f.confidence_score >= min_confidence]
+    
+    def get_by_confidence_level(self, level: str) -> List[WebVulnerabilityFinding]:
+        """
+        Get findings by confidence level (High, Medium, Low, Suspicious).
+        
+        Args:
+            level: Confidence level string
+            
+        Returns:
+            List of findings with specified confidence level
+        """
+        return [f for f in self.findings if f.confidence_level == level]
+    
+    def get_suspicious_findings(self) -> List[WebVulnerabilityFinding]:
+        """Get findings marked as Suspicious (confidence < 70%)."""
+        return self.get_by_confidence_level("Suspicious")
+    
+    def sort_by_confidence(self, descending: bool = True) -> List[WebVulnerabilityFinding]:
+        """
+        Sort findings by confidence score.
+        
+        Args:
+            descending: If True, sort high to low; if False, low to high
+            
+        Returns:
+            Sorted list of findings
+        """
+        return sorted(self.findings, key=lambda f: f.confidence_score, reverse=descending)
+    
+    def sort_by_severity_and_confidence(self) -> List[WebVulnerabilityFinding]:
+        """
+        Sort findings by severity first, then by confidence score.
+        
+        Returns:
+            Sorted list of findings
+        """
+        severity_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3, "Info": 4}
+        return sorted(
+            self.findings,
+            key=lambda f: (
+                severity_order.get(f.severity, 5),
+                -f.confidence_score  # Higher confidence first
+            )
+        )
     
     def export_json(self) -> str:
         """Export findings as JSON"""

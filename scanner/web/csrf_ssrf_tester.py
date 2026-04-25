@@ -13,6 +13,7 @@ import requests
 import logging
 from urllib.parse import urljoin, urlparse, parse_qs
 import time
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -371,12 +372,28 @@ class CSRFTester:
 
                 # Check CSRF protection
                 if not form["has_csrf_protection"]:
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "CSRF",
+                        ["token_missing"],
+                        {"token_missing": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    
                     finding = {
                         "type": "Missing CSRF Protection",
                         "severity": "High",
                         "url": form["action"],
                         "method": form["method"],
                         "evidence": "Form performs state change but has no CSRF token",
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["token_missing"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "CSRF", form["action"], "csrf_token", "token_missing"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "CSRF", ["token_missing"], conf_score
+                        ),
                     }
                     findings["csrf_token_missing"].append(finding)
                     logger.warning(f"CSRF protection missing on {form['action']}")
@@ -389,12 +406,28 @@ class CSRFTester:
                     tokens_differ, token_evidence = CSRFAnalyzer.check_csrf_token_freshness(resp, resp2)
 
                     if not tokens_differ:
+                        conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                            "CSRF",
+                            ["token_static"],
+                            {"token_static": True},
+                            {"response_status": "unexpected", "reproducible": True}
+                        )
+                        
                         finding = {
                             "type": "Weak CSRF Token Protection",
                             "severity": "Medium",
                             "url": form["action"],
                             "method": form["method"],
                             "evidence": token_evidence,
+                            "confidence_score": conf_score,
+                            "confidence_level": conf_level,
+                            "detection_methods": ["token_static"],
+                            "verification_steps": ConfidenceScorer.get_verification_hints(
+                                "CSRF", form["action"], "csrf_token", "token_static"
+                            ),
+                            "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                                "CSRF", ["token_static"], conf_score
+                            ),
                         }
                         findings["weak_token_protection"].append(finding)
 
@@ -402,19 +435,69 @@ class CSRFTester:
             origin_validates, origin_evidence = CSRFAnalyzer.check_origin_validation(
                 url, cookies, self.timeout, self.verify_ssl
             )
-            findings["origin_validation"].append({
-                "validates": origin_validates,
-                "evidence": origin_evidence,
-            })
+            
+            if not origin_validates:
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "CSRF",
+                    ["state_change_success"],
+                    {"state_change_success": True},
+                    {"response_status": "unexpected", "reproducible": True}
+                )
+                
+                origin_finding = {
+                    "validates": origin_validates,
+                    "evidence": origin_evidence,
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["state_change_success"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "CSRF", url, "Origin", "state_change_success"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "CSRF", ["state_change_success"], conf_score
+                    ),
+                }
+            else:
+                origin_finding = {
+                    "validates": origin_validates,
+                    "evidence": origin_evidence,
+                }
+            
+            findings["origin_validation"].append(origin_finding)
 
             # Check SameSite protection
             samesite_present, samesite_evidence = CSRFAnalyzer.check_samesite_cookie(
                 cookies or {}, dict(resp.headers)
             )
-            findings["samesite_protection"].append({
-                "present": samesite_present,
-                "evidence": samesite_evidence,
-            })
+            
+            if not samesite_present:
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "CSRF",
+                    ["combined"],
+                    {"samesite_missing": True},
+                    {"response_status": "unexpected"}
+                )
+                
+                samesite_finding = {
+                    "present": samesite_present,
+                    "evidence": samesite_evidence,
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["combined"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "CSRF", url, "Set-Cookie", "combined"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "CSRF", ["combined"], conf_score
+                    ),
+                }
+            else:
+                samesite_finding = {
+                    "present": samesite_present,
+                    "evidence": samesite_evidence,
+                }
+            
+            findings["samesite_protection"].append(samesite_finding)
 
         except requests.RequestException as e:
             logger.warning(f"CSRF test failed: {e}")
@@ -458,6 +541,15 @@ class SSRFTester:
                 is_vulnerable, evidence = SSRFDetector.detect_ssrf_response(response, payload["url"])
 
                 if is_vulnerable:
+                    detection_method = "response_contains_internal"
+                    
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "SSRF",
+                        [detection_method],
+                        {detection_method: True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    
                     finding = {
                         "type": "Server-Side Request Forgery (SSRF)",
                         "severity": "Critical",
@@ -467,12 +559,30 @@ class SSRFTester:
                         "payload_type": payload["type"],
                         "evidence": evidence,
                         "status_code": response.status_code,
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": [detection_method],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "SSRF", url, parameter_name, detection_method
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "SSRF", [detection_method], conf_score
+                        ),
                     }
                     findings.append(finding)
                     logger.warning(f"SSRF vulnerability found: {parameter_name}")
 
             except requests.Timeout:
                 # Timeout might indicate connection to internal service
+                detection_method = "timing_detected"
+                
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "SSRF",
+                    [detection_method],
+                    {detection_method: True},
+                    {"response_status": "timeout"}
+                )
+                
                 finding = {
                     "type": "Server-Side Request Forgery (SSRF) - Potential",
                     "severity": "High",
@@ -481,6 +591,15 @@ class SSRFTester:
                     "payload": payload["url"],
                     "payload_type": payload["type"],
                     "evidence": "Request timeout - may indicate SSRF to unreachable internal service",
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": [detection_method],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "SSRF", url, parameter_name, detection_method
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "SSRF", [detection_method], conf_score
+                    ),
                 }
                 findings.append(finding)
 

@@ -12,6 +12,7 @@ from enum import Enum
 import requests
 import logging
 from urllib.parse import urljoin
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +263,23 @@ class SensitiveDataDetector:
                         "context": context[:100],
                         "url": response_url,
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Sensitive Data Exposure",
+                        ["pattern_match"],
+                        {"pattern_matched": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["pattern_match"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Sensitive Data Exposure", response_url, pattern.name, "pattern_match"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Sensitive Data Exposure", ["pattern_match"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     logger.warning(f"Sensitive data found: {pattern.name}")
 
@@ -360,6 +378,23 @@ class CookieAnalyzer:
                         "issue": description,
                         "evidence": f"Cookie '{cookie_name}' may contain sensitive data",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Sensitive Data Exposure",
+                        ["pattern_match"],
+                        {"pattern_matched": True},
+                        {"reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["pattern_match"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Sensitive Data Exposure", "cookie_analysis", cookie_name, "pattern_match"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Sensitive Data Exposure", ["pattern_match"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     break
 
@@ -380,20 +415,56 @@ class CookieAnalyzer:
 
         # Check for security flags
         if "Secure" not in set_cookie:
-            findings.append({
+            finding = {
                 "type": "Insecure Cookie Flag",
                 "severity": "High",
                 "issue": "Secure flag missing",
                 "evidence": "Cookie can be transmitted over HTTP",
+            }
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "Security Misconfiguration",
+                ["default_value"],
+                {"flag_missing": True},
+                {"reproducible": True}
+            )
+            finding.update({
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "detection_methods": ["default_value"],
+                "verification_steps": ConfidenceScorer.get_verification_hints(
+                    "Security Misconfiguration", "cookie_analysis", "Secure", "default_value"
+                ),
+                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                    "Security Misconfiguration", ["default_value"], conf_score
+                ),
             })
+            findings.append(finding)
 
         if "HttpOnly" not in set_cookie:
-            findings.append({
+            finding = {
                 "type": "HttpOnly Cookie Flag Missing",
                 "severity": "High",
                 "issue": "HttpOnly flag missing",
                 "evidence": "Cookie accessible via JavaScript (XSS risk)",
+            }
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "Security Misconfiguration",
+                ["default_value"],
+                {"flag_missing": True},
+                {"reproducible": True}
+            )
+            finding.update({
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "detection_methods": ["default_value"],
+                "verification_steps": ConfidenceScorer.get_verification_hints(
+                    "Security Misconfiguration", "cookie_analysis", "HttpOnly", "default_value"
+                ),
+                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                    "Security Misconfiguration", ["default_value"], conf_score
+                ),
             })
+            findings.append(finding)
 
         return findings
 
@@ -430,6 +501,23 @@ class HeaderAnalyzer:
                     "value": value,
                     "issue": description,
                 }
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "Sensitive Data Exposure",
+                    ["pattern_match"],
+                    {"header_present": True},
+                    {"reproducible": True}
+                )
+                finding.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["pattern_match"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "Sensitive Data Exposure", "header_analysis", header_name, "pattern_match"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "Sensitive Data Exposure", ["pattern_match"], conf_score
+                    ),
+                })
                 findings.append(finding)
 
         return findings
@@ -488,11 +576,29 @@ class SensitiveDataTester:
             # Detect excessive data
             data_analysis = SensitiveDataDetector.detect_excessive_data(response.text)
             if any(data_analysis.values()):
-                findings["excessive_data"].append({
+                finding = {
                     "type": "Excessive Data Exposure",
                     "severity": "Medium",
                     "analysis": data_analysis,
+                }
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "Sensitive Data Exposure",
+                    ["in_response_body"],
+                    {"excessive_data_detected": True},
+                    {"reproducible": True}
+                )
+                finding.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["in_response_body"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "Sensitive Data Exposure", url, "response_body", "in_response_body"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "Sensitive Data Exposure", ["in_response_body"], conf_score
+                    ),
                 })
+                findings["excessive_data"].append(finding)
 
         except requests.RequestException as e:
             logger.warning(f"Sensitive data test failed: {e}")

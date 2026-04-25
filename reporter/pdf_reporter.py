@@ -583,6 +583,93 @@ def generate_pdf(project: dict) -> bytes:
             t = _make_table(rows, [36 * mm, 18 * mm, 24 * mm, 38 * mm, CONTENT_W - 116 * mm])
             _apply_sev_colors(t, findings)
             story.append(KeepTogether(t))
+
+            # ─── Compliance & Standards Section ───
+            story.append(Spacer(1, 4 * mm))
+            story += _section("Compliance & Standards Mapping", S)
+
+            # Collect OWASP categories
+            owasp_counts = _count_by(findings, lambda f: f.get("owasp_category", "Unknown"))
+            if owasp_counts:
+                rows = [["OWASP Category", "Count"]]
+                for owasp, count in sorted(owasp_counts.items(), key=lambda x: -x[1]):
+                    rows.append([
+                        Paragraph(_plain(owasp), S["body"]),
+                        Paragraph(str(count), S["bold"]),
+                    ])
+                t = _make_table(rows, [CONTENT_W * 0.7, CONTENT_W * 0.3])
+                story.append(Paragraph("OWASP Top 10 2021 Mapping:", S["sub_head"]))
+                story.append(t)
+                story.append(Spacer(1, 2 * mm))
+
+            # Collect CWE IDs
+            cwe_counts = _count_by(findings, lambda f: f.get("cwe_id", "Unknown"))
+            if cwe_counts:
+                rows = [["CWE ID", "Description", "Count"]]
+                cwe_descriptions = {
+                    "CWE-89": "SQL Injection",
+                    "CWE-79": "Cross-site Scripting",
+                    "CWE-352": "Cross-Site Request Forgery",
+                    "CWE-918": "Server-Side Request Forgery",
+                    "CWE-639": "Authorization Issues",
+                    "CWE-434": "Unrestricted Upload of File",
+                    "CWE-22": "Path Traversal",
+                    "CWE-287": "Improper Authentication",
+                    "CWE-327": "Use of Broken Cryptography",
+                    "CWE-200": "Exposure of Sensitive Information",
+                    "CWE-16": "Configuration",
+                    "CWE-502": "Deserialization of Untrusted Data",
+                    "CWE-840": "Business Logic",
+                    "CWE-770": "Allocation of Resources",
+                }
+                for cwe, count in sorted(cwe_counts.items(), key=lambda x: -x[1])[:10]:
+                    desc = cwe_descriptions.get(cwe, "")
+                    rows.append([
+                        Paragraph(_plain(cwe), S["code"]),
+                        Paragraph(_plain(desc), S["body"]),
+                        Paragraph(str(count), S["bold"]),
+                    ])
+                t = _make_table(rows, [18 * mm, CONTENT_W - 40 * mm, 22 * mm])
+                story.append(Paragraph("CWE (Common Weakness Enumeration) References:", S["sub_head"]))
+                story.append(t)
+                story.append(Spacer(1, 2 * mm))
+
+            # Collect compliance frameworks
+            compliance_frameworks = set()
+            for f in findings:
+                if f.get("compliance_impact"):
+                    if isinstance(f["compliance_impact"], list):
+                        compliance_frameworks.update(f["compliance_impact"])
+                    else:
+                        compliance_frameworks.add(f["compliance_impact"])
+
+            if compliance_frameworks:
+                frameworks_text = ", ".join(sorted(compliance_frameworks))
+                story.append(Paragraph("Affected Compliance Frameworks:", S["sub_head"]))
+                story.append(Paragraph(_plain(frameworks_text), S["body"]))
+                story.append(Spacer(1, 2 * mm))
+
+            # CVSS Score Distribution
+            cvss_scores = [f.get("cvss_score", 0) for f in findings if f.get("cvss_score")]
+            if cvss_scores:
+                avg_cvss = sum(cvss_scores) / len(cvss_scores)
+                story.append(Paragraph("CVSS v3.1 Scoring:", S["sub_head"]))
+                cvss_row = [[
+                    f"Average CVSS Score: {avg_cvss:.1f}/10.0",
+                    f"Highest: {max(cvss_scores):.1f}",
+                    f"Lowest: {min(cvss_scores):.1f}",
+                ]]
+                t = Table(cvss_row, colWidths=[CONTENT_W / 3] * 3)
+                t.setStyle(TableStyle([
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("BACKGROUND", (0, 0), (-1, -1), BG_ROW),
+                    ("BOX", (0, 0), (-1, -1), 0.4, BORDER),
+                ]))
+                story.append(t)
         else:
             story.append(Paragraph("No web vulnerabilities detected.", S["muted"]))
         story.append(Spacer(1, 4 * mm))

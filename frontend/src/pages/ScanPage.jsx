@@ -6,6 +6,7 @@ import ProgressLog      from "../components/ProgressLog";
 import ScanStatus       from "../components/ScanStatus";
 import ResultsDashboard from "../components/ResultsDashboard";
 import ResizableLayout  from "../components/ResizableLayout";
+import ScheduleManager  from "../components/ScheduleManager";
 
 const DEFAULT_CONFIG = {
   target: "", recon: false, ports: false, cve: false, web: false,
@@ -62,6 +63,7 @@ export default function ScanPage() {
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [warnings, setWarnings] = useState(null);
   const [pendingConfig, setPendingConfig] = useState(null);
+  const [showScheduler, setShowScheduler] = useState(false);
 
   const {
     scanning, canResume, log, results, moduleStatus,
@@ -107,23 +109,43 @@ export default function ScanPage() {
       )}
 
       <ResizableLayout sidebar={
-        <ScanForm config={config} onChange={setConfig}
-          onScan={handleScan}
-          scanning={scanning} />
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", height: "100%", overflowY: "auto" }}>
+          <ScanForm config={config} onChange={setConfig}
+            onScan={handleScan}
+            scanning={scanning} />
+          
+          {savedProject && (
+            <div style={{ padding: "1rem", borderRadius: 8, background: "var(--bg2)" }}>
+              <div style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+                💾 Saved as <strong>{savedProject.name}</strong>
+              </div>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowScheduler(!showScheduler)}
+                style={{ width: "100%", marginBottom: "0.5rem" }}
+              >
+                {showScheduler ? "Hide" : "📅 Schedule"}
+              </button>
+              <Link className="save-banner-link" to={`/projects/${savedProject.id}`}
+                style={{ display: "block", textAlign: "center", marginBottom: "0.5rem" }}>
+                View project →
+              </Link>
+              <button className="btn-secondary" onClick={() => setSavedProject(null)} style={{ width: "100%" }}>
+                Clear
+              </button>
+            </div>
+          )}
+          
+          {savedProject && showScheduler && (
+            <ScheduleManager projectId={savedProject.id} />
+          )}
+        </div>
       }>
         {log.length === 0 && !hasResults && (
           <div className="empty">
             <div className="hero">🛡️</div>
             <h2>Ready to scan</h2>
             <p>Enter a target, choose modules, and hit <strong>Run Scan</strong>.</p>
-          </div>
-        )}
-
-        {savedProject && (
-          <div className="save-banner">
-            <span>💾 Saved as <strong>{savedProject.name}</strong></span>
-            <Link className="save-banner-link" to={`/projects/${savedProject.id}`}>View project →</Link>
-            <button className="save-banner-close" onClick={() => setSavedProject(null)}>×</button>
           </div>
         )}
 

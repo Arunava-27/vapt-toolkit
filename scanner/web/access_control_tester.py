@@ -15,6 +15,7 @@ import logging
 from urllib.parse import urlencode, parse_qs, urlparse, quote
 import uuid
 import difflib
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -343,6 +344,23 @@ class IDORTester:
                         if is_vulnerable:
                             sensitive_fields = ResponseAnalyzer.extract_sensitive_fields(test_resp.text)
 
+                            # Determine detection methods
+                            detection_methods = ["direct_access"]
+                            if baseline_resp.status_code != test_resp.status_code:
+                                detection_methods.append("response_timing")
+                            if any(error in test_resp.text.lower() for error in ["unauthorized", "forbidden", "permission denied"]):
+                                detection_methods.append("error_message")
+                            if len(detection_methods) > 1:
+                                detection_methods = ["combined"]
+
+                            # Calculate confidence score
+                            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                                "Authorization",
+                                detection_methods,
+                                {"unauthorized_access": True, "sensitive_data_exposed": bool(sensitive_fields)},
+                                {"response_status": "unexpected", "reproducible": True}
+                            )
+
                             finding = {
                                 "type": "Insecure Direct Object Reference (IDOR)",
                                 "severity": "Critical" if sensitive_fields else "High",
@@ -355,6 +373,15 @@ class IDORTester:
                                 "evidence": evidence,
                                 "sensitive_data": sensitive_fields,
                                 "status_code": test_resp.status_code,
+                                "confidence_score": conf_score,
+                                "confidence_level": conf_level,
+                                "detection_methods": detection_methods,
+                                "verification_steps": ConfidenceScorer.get_verification_hints(
+                                    "Authorization", test_url, identifier["name"], detection_methods[0]
+                                ),
+                                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                                    "Authorization", detection_methods, conf_score
+                                ),
                             }
                             findings.append(finding)
                             logger.warning(f"IDOR vulnerability found: {identifier['value']} → {test_id}")
@@ -404,6 +431,14 @@ class IDORTester:
                 similarity = ResponseAnalyzer.calculate_similarity(admin_resp.text, user_accessing_admin.text)
 
                 if similarity > 0.7:  # More than 70% similar
+                    # Calculate confidence score
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Authorization",
+                        ["direct_access"],
+                        {"unauthorized_access": True, "privilege_escalation": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+
                     finding = {
                         "type": "Vertical Privilege Escalation",
                         "severity": "Critical",
@@ -412,6 +447,15 @@ class IDORTester:
                         "method": method,
                         "evidence": f"User accessed admin endpoint with {similarity:.0%} similarity to admin response",
                         "status_code": user_accessing_admin.status_code,
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["direct_access"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Authorization", admin_url, "admin_endpoint", "direct_access"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Authorization", ["direct_access"], conf_score
+                        ),
                     }
                     findings.append(finding)
                     logger.warning("Vertical privilege escalation detected")

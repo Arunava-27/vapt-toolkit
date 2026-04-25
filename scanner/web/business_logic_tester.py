@@ -15,6 +15,7 @@ import requests
 import logging
 from urllib.parse import urljoin, parse_qs, urlparse
 from collections import defaultdict
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,23 @@ class WorkflowAnalyzer:
                         "skipped_steps": steps[:skip_index+1],
                         "evidence": f"Final step {final_step.step_name} accessible without completing earlier steps",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Business Logic",
+                        ["unauthorized_state"],
+                        {"state_accessible": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["unauthorized_state"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Business Logic", final_step.endpoint, "workflow_state", "unauthorized_state"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Business Logic", ["unauthorized_state"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     logger.warning("Workflow bypass detected - step skipping")
                     break
@@ -174,6 +192,23 @@ class WorkflowAnalyzer:
                         "vulnerability": BusinessLogicVulnerability.STEP_SEQUENCING.value,
                         "evidence": "Workflow steps can be executed in arbitrary order",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Business Logic",
+                        ["state_inconsistency"],
+                        {"state_mismatch": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["state_inconsistency"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Business Logic", final_step.endpoint, "workflow_order", "state_inconsistency"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Business Logic", ["state_inconsistency"], conf_score
+                        ),
+                    })
                     findings.append(finding)
 
             except requests.RequestException:
@@ -251,6 +286,23 @@ class PricingLogicTester:
                         "description": description,
                         "evidence": f"System accepted {description}: {test_value}",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Business Logic",
+                        ["state_inconsistency"],
+                        {"invalid_value_accepted": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["state_inconsistency"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Business Logic", endpoint_url, price_param, "state_inconsistency"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Business Logic", ["state_inconsistency"], conf_score
+                        ),
+                    })
                     findings.append(finding)
                     logger.warning(f"Price manipulation found: {description}")
 
@@ -317,6 +369,23 @@ class ReplayAttackTester:
                     "method": method,
                     "evidence": "Identical state-changing requests were both accepted",
                 }
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "Business Logic",
+                    ["unauthorized_state"],
+                    {"duplicate_accepted": True},
+                    {"response_status": "unexpected", "reproducible": True}
+                )
+                finding.update({
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "detection_methods": ["unauthorized_state"],
+                    "verification_steps": ConfidenceScorer.get_verification_hints(
+                        "Business Logic", endpoint_url, "replay_request", "unauthorized_state"
+                    ),
+                    "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                        "Business Logic", ["unauthorized_state"], conf_score
+                    ),
+                })
                 findings.append(finding)
                 logger.warning("Replay vulnerability detected")
 
@@ -430,6 +499,23 @@ class RaceConditionTester:
                 "successful_requests": success_count,
                 "evidence": f"{success_count}/{concurrent_count} concurrent requests succeeded (possible race condition)",
             }
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "Business Logic",
+                ["state_inconsistency"],
+                {"concurrent_success": True},
+                {"response_status": "unexpected", "reproducible": True}
+            )
+            finding.update({
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "detection_methods": ["state_inconsistency"],
+                "verification_steps": ConfidenceScorer.get_verification_hints(
+                    "Business Logic", endpoint_url, "concurrent_requests", "state_inconsistency"
+                ),
+                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                    "Business Logic", ["state_inconsistency"], conf_score
+                ),
+            })
             findings.append(finding)
             logger.warning("Race condition vulnerability detected")
 
@@ -478,6 +564,23 @@ class AccountTakeoverTester:
                 "endpoint": reset_endpoint,
                 "evidence": "Password reset endpoint allows multiple requests without rate limiting",
             }
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "Business Logic",
+                ["unauthorized_state"],
+                {"rate_limiting_absent": True},
+                {"reproducible": True}
+            )
+            finding.update({
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "detection_methods": ["unauthorized_state"],
+                "verification_steps": ConfidenceScorer.get_verification_hints(
+                    "Business Logic", reset_endpoint, "rate_limiting", "unauthorized_state"
+                ),
+                "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                    "Business Logic", ["unauthorized_state"], conf_score
+                ),
+            })
             findings.append(finding)
 
         # Test 2: Extract reset token from response
@@ -500,6 +603,23 @@ class AccountTakeoverTester:
                         "token_sample": token[:20] + "...",
                         "evidence": "Reset token appears to follow predictable pattern",
                     }
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Business Logic",
+                        ["state_inconsistency"],
+                        {"token_predictable": True},
+                        {"response_status": "unexpected", "reproducible": True}
+                    )
+                    finding.update({
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "detection_methods": ["state_inconsistency"],
+                        "verification_steps": ConfidenceScorer.get_verification_hints(
+                            "Business Logic", reset_endpoint, "reset_token", "state_inconsistency"
+                        ),
+                        "false_positive_risk": ConfidenceScorer.get_false_positive_risk(
+                            "Business Logic", ["state_inconsistency"], conf_score
+                        ),
+                    })
                     findings.append(finding)
 
         except requests.RequestException:
