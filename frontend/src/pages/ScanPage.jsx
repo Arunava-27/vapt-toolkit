@@ -72,7 +72,7 @@ export default function ScanPage() {
   const {
     scanning, canResume, log, results, moduleStatus,
     activatedModules, savedProject, setSavedProject,
-    startScan, stopScan, resumeScan, getElapsed,
+    startScan, stopScan, resumeScan, getElapsed, clearScan,
   } = useScan();
 
   const hasResults = Object.keys(results).length > 0;
@@ -138,7 +138,7 @@ export default function ScanPage() {
       port_range: "top-1000",
       scan_type: "connect",
       version_detect: true,
-      os_detect: true,
+      os_detect: false,  // Disable OS detection to avoid root privilege requirement in WSL
       port_script: "",
       port_timing: 4,
       skip_ping: true,
@@ -259,6 +259,30 @@ export default function ScanPage() {
               📝 JSON API
             </button>
           </div>
+
+          {/* Clear Scans Button */}
+          <button
+            onClick={() => {
+              if (window.confirm("Clear all current scan results and logs?")) {
+                clearScan();
+              }
+            }}
+            style={{
+              padding: "0.5rem 1rem",
+              background: "var(--bg2)",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              fontWeight: "500",
+              transition: "all 0.2s",
+              marginBottom: "0.5rem",
+            }}
+            title="Clear all scan results and start fresh"
+          >
+            🗑️ Clear Scans
+          </button>
 
           {/* Form Mode */}
           {scanMode === "form" && (

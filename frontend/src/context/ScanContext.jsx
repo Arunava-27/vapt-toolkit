@@ -282,11 +282,23 @@ export function ScanProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
 
+  // ── clearScan (clear all results and logs) ────────────────────────────────
+  const clearScan = useCallback(() => {
+    setLog([]);
+    setResults({});
+    setModuleStatus({});
+    setActivatedModules([]);
+    setSavedProject(null);
+    setCanResume(false);
+    localStorage.removeItem("vapt-active-scan");
+    localStorage.removeItem("vapt-paused-scan");
+  }, []);
+
   return (
     <ScanContext.Provider value={{
       scanId, scanning, canResume, log, results, moduleStatus,
       activatedModules, savedProject, setSavedProject,
-      startScan, stopScan, resumeScan, getElapsed,
+      startScan, stopScan, resumeScan, getElapsed, clearScan,
     }}>
       {children}
     </ScanContext.Provider>

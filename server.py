@@ -888,9 +888,11 @@ async def _execute_scan(state: ScanState):
                 push("progress", message=f"Launching nmap on {req.target} (range: {req.port_range}, type: {req.scan_type})…")
                 results["ports"] = await loop.run_in_executor(None, port_scanner.run)
                 state.port_scanner = None
+                logger.info(f"[SERVER] Port scan completed for {req.target}, found {len(results['ports'].get('open_ports', []))} ports")
                 if state.status == "stopped":
                     push("module_error", module="ports", message="Stopped by user.")
                 else:
+                    logger.info(f"[SERVER] Pushing 'ports' event with {len(results['ports'].get('open_ports', []))} ports to frontend")
                     push("ports", data=results["ports"])
                     
                     # Send notifications for critical open ports
