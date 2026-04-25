@@ -1,0 +1,26 @@
+{
+  "sections": [
+    {
+      "title": "Security Assessment Report",
+      "type": "header"
+    },
+    {
+      "show_fields": [
+        "project",
+        "target",
+        "date"
+      ],
+      "type": "summary"
+    },
+    {
+      "limit_top": 10,
+      "type": "findings"
+    },
+    {
+      "priority_only": true,
+      "type": "remediation"
+    }
+  ],
+  "name": "Executive Summary",
+  "description": "High-level overview for executives and stakeholders"
+}

@@ -1,0 +1,197 @@
+:root {
+  color-scheme: dark;
+
+  /* Dark theme - only mode */
+  --bg-primary: #0a0e27;
+  --bg-secondary: #1a1f3a;
+  --bg-tertiary: #252d47;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b5c7;
+  --text-tertiary: #8a8fa0;
+  --border-color: #2d3547;
+  --border-light: #1a1f3a;
+  --accent-primary: #00d9ff;
+  --accent-secondary: #7c3aed;
+  --accent-hover: #06b6d4;
+  --accent-light: #0a0e27;
+  --accent-overlay-weak: rgba(0, 217, 255, 0.05);
+  --accent-overlay-light: rgba(0, 217, 255, 0.1);
+  --accent-overlay-medium: rgba(0, 217, 255, 0.15);
+  --surface-default: #1a1f3a;
+  --surface-overlay: rgba(255, 255, 255, 0.05);
+  --success-color: #10b981;
+  --success-overlay: rgba(16, 185, 129, 0.1);
+  --warning-color: #f59e0b;
+  --warning-overlay: rgba(245, 158, 11, 0.1);
+  --error-color: #ef4444;
+  --error-overlay: rgba(239, 68, 68, 0.1);
+  --info-color: #00d9ff;
+  --focus-ring: 0 0 0 3px rgba(0, 217, 255, 0.3);
+  --transition-time: 0.3s;
+}
+
+* {
+  transition: background-color var(--transition-time) ease,
+              color var(--transition-time) ease,
+              border-color var(--transition-time) ease,
+              box-shadow var(--transition-time) ease;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Form elements */
+input,
+textarea,
+select {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+/* Buttons */
+button {
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+button:hover {
+  background-color: var(--bg-tertiary);
+}
+
+button.primary,
+button.btn-primary {
+  background-color: var(--accent-primary);
+  color: #0a0e27;
+  border-color: var(--accent-primary);
+}
+
+button.primary:hover,
+button.btn-primary:hover {
+  background-color: var(--accent-hover);
+}
+
+/* Links */
+a {
+  color: var(--accent-primary);
+}
+
+a:hover {
+  color: var(--accent-secondary);
+}
+
+/* Tables */
+table {
+  border-color: var(--border-color);
+  background-color: var(--bg-primary);
+}
+
+th {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+td {
+  border-color: var(--border-color);
+}
+
+/* Cards and containers */
+.card,
+.panel,
+.container,
+.box {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+/* Code blocks */
+code,
+pre {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+/* Badges */
+.badge {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.badge.success {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
+}
+
+.badge.warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--warning-color);
+}
+
+.badge.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--error-color);
+}
+
+/* Modals and overlays */
+.modal,
+.overlay {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Selection */
+::selection {
+  background-color: var(--accent-primary);
+  color: #0a0e27;
+}
+
+/* Disabled elements */
+:disabled,
+.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

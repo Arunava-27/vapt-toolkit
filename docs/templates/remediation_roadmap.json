@@ -1,0 +1,30 @@
+{
+  "sections": [
+    {
+      "title": "Remediation Roadmap",
+      "type": "header"
+    },
+    {
+      "type": "summary"
+    },
+    {
+      "phases": [
+        "immediate",
+        "short-term",
+        "long-term"
+      ],
+      "type": "timeline"
+    },
+    {
+      "type": "remediation",
+      "with_timeline": true,
+      "with_steps": true
+    },
+    {
+      "include_contact": true,
+      "type": "footer"
+    }
+  ],
+  "name": "Remediation Roadmap",
+  "description": "Actionable remediation timeline and steps"
+}

@@ -4,7 +4,7 @@
   max-width: 900px;
   margin: 0 auto;
   padding: 20px;
-  background: white;
+  background: var(--bg-secondary);
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
@@ -16,9 +16,9 @@
   align-items: center;
   justify-content: center;
   min-height: 300px;
-  color: #57606a;
+  color: var(--text-secondary);
   font-size: 16px;
-  background: #f6f8fa;
+  background: var(--bg-secondary);
   border-radius: 8px;
   border: 2px dashed #d0d7de;
 }
@@ -60,7 +60,7 @@
 
 .btn-primary {
   background: #1f6feb;
-  color: white;
+  color: var(--text-primary);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -69,13 +69,13 @@
 }
 
 .btn-secondary {
-  background: white;
+  background: var(--bg-secondary);
   color: #1f6feb;
   border: 1px solid #1f6feb;
 }
 
 .btn-secondary:hover {
-  background: #f6f8fa;
+  background: var(--bg-secondary);
 }
 
 .btn-primary:disabled,
@@ -90,7 +90,7 @@
   display: flex;
   align-items: center;
   gap: 32px;
-  background: #f6f8fa;
+  background: var(--bg-secondary);
   padding: 24px;
   border-radius: 8px;
   margin-bottom: 24px;
@@ -116,7 +116,7 @@
 .risk-info h3 {
   margin: 0 0 8px 0;
   font-size: 18px;
-  color: #24292f;
+  color: var(--text-primary);
 }
 
 .risk-level {
@@ -130,28 +130,28 @@
 
 .risk-level.risk-critical {
   background: #cf222e;
-  color: white;
+  color: var(--text-primary);
 }
 
 .risk-level.risk-high {
   background: #f0883e;
-  color: white;
+  color: var(--text-primary);
 }
 
 .risk-level.risk-medium {
   background: #d29922;
-  color: white;
+  color: var(--text-primary);
 }
 
 .risk-level.risk-low {
   background: #3fb950;
-  color: white;
+  color: var(--text-primary);
 }
 
 .risk-description {
   font-size: 14px;
   line-height: 1.5;
-  color: #57606a;
+  color: var(--text-secondary);
 }
 
 /* Metrics Grid */
@@ -164,7 +164,7 @@
 }
 
 .metric-card {
-  background: #f6f8fa;
+  background: var(--bg-secondary);
   border: 1px solid #d0d7de;
   border-radius: 6px;
   padding: 16px;
@@ -203,7 +203,7 @@
 
 .metric-label {
   font-size: 12px;
-  color: #57606a;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -216,7 +216,7 @@
 .section-title {
   font-size: 16px;
   font-weight: 600;
-  color: #24292f;
+  color: var(--text-primary);
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 2px solid #d0d7de;
@@ -235,7 +235,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: #f6f8fa;
+  background: var(--bg-secondary);
   border-left: 4px solid #d0d7de;
   border-radius: 4px;
   transition: all 0.2s ease;
@@ -247,25 +247,25 @@
 }
 
 .finding-item.sev-critical:hover {
-  background: #fff1f0;
+  background: var(--bg-secondary)1f0;
 }
 
 .finding-item.sev-high {
   border-left-color: #f0883e;
-  background: #fff8c5;
+  background: var(--bg-secondary)8c5;
 }
 
 .finding-item.sev-high:hover {
-  background: #fffadb;
+  background: var(--bg-secondary)adb;
 }
 
 .finding-item.sev-medium {
   border-left-color: #d29922;
-  background: #fff3c4;
+  background: var(--bg-secondary)3c4;
 }
 
 .finding-item.sev-medium:hover {
-  background: #fffae6;
+  background: var(--bg-secondary)ae6;
 }
 
 .finding-item.sev-low {
@@ -279,13 +279,13 @@
 
 .finding-index {
   font-weight: 600;
-  color: #57606a;
+  color: var(--text-secondary);
   min-width: 20px;
 }
 
 .finding-title {
   flex: 1;
-  color: #24292f;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -298,7 +298,7 @@
 }
 
 .sev-badge {
-  color: white;
+  color: var(--text-primary);
 }
 
 .sev-badge.sev-critical {
@@ -330,7 +330,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: #f6f8fa;
+  background: var(--bg-secondary);
   border: 1px solid #d0d7de;
   border-radius: 4px;
   transition: all 0.2s ease;
@@ -338,12 +338,12 @@
 
 .compliance-item:hover {
   border-color: #1f6feb;
-  background: #fff;
+  background: var(--bg-secondary);
 }
 
 .compliance-category {
   font-weight: 500;
-  color: #24292f;
+  color: var(--text-primary);
 }
 
 .compliance-percent {
@@ -361,7 +361,7 @@
 }
 
 .roadmap-item {
-  background: #f6f8fa;
+  background: var(--bg-secondary);
   border: 1px solid #d0d7de;
   border-radius: 6px;
   padding: 12px;
@@ -387,8 +387,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: white;
-  color: white;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 12px;
   flex-shrink: 0;
@@ -412,7 +412,7 @@
 
 .roadmap-title {
   flex: 1;
-  color: #24292f;
+  color: var(--text-primary);
   font-weight: 500;
   word-break: break-word;
 }
@@ -422,7 +422,7 @@
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 3px;
-  color: white;
+  color: var(--text-primary);
 }
 
 .roadmap-severity.sev-critical {
@@ -445,7 +445,7 @@
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: #57606a;
+  color: var(--text-secondary);
 }
 
 .roadmap-impact,
@@ -460,11 +460,11 @@
 
 .empty-state {
   text-align: center;
-  color: #57606a;
+  color: var(--text-secondary);
   font-size: 13px;
   padding: 16px;
   font-style: italic;
-  background: #f6f8fa;
+  background: var(--bg-secondary);
   border-radius: 4px;
   border: 1px dashed #d0d7de;
 }
@@ -481,7 +481,7 @@
   border-top: 1px solid #d0d7de;
   text-align: right;
   font-size: 11px;
-  color: #57606a;
+  color: var(--text-secondary);
 }
 
 /* Print Styles */

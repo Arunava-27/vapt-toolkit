@@ -18,7 +18,7 @@
 
 .modal-content {
   position: relative;
-  background: white;
+  background: var(--bg-secondary);
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   width: 90%;
@@ -216,7 +216,7 @@
 }
 
 .btn-cancel {
-  background: white;
+  background: var(--bg-secondary);
   color: #333;
 }
 
@@ -226,7 +226,7 @@
 
 .btn-save {
   background: #1976d2;
-  color: white;
+  color: var(--text-primary);
   border-color: #1976d2;
 }
 

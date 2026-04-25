@@ -1,0 +1,25 @@
+{
+  "sections": [
+    {
+      "title": "Risk Assessment Report",
+      "type": "header"
+    },
+    {
+      "type": "summary"
+    },
+    {
+      "show_heat_map": true,
+      "type": "risk_matrix"
+    },
+    {
+      "prioritized_by_risk": true,
+      "type": "findings"
+    },
+    {
+      "by_priority": true,
+      "type": "remediation"
+    }
+  ],
+  "name": "Risk Assessment",
+  "description": "Risk-based prioritization and impact analysis"
+}

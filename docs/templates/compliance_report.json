@@ -1,0 +1,28 @@
+{
+  "sections": [
+    {
+      "title": "Compliance Assessment Report",
+      "type": "header"
+    },
+    {
+      "type": "summary"
+    },
+    {
+      "standards": [
+        "OWASP",
+        "CWE",
+        "CVSS"
+      ],
+      "type": "compliance_mapping"
+    },
+    {
+      "with_mappings": true,
+      "type": "findings"
+    },
+    {
+      "type": "remediation"
+    }
+  ],
+  "name": "Compliance Report",
+  "description": "OWASP Top 10, CWE, and CVSS mapped findings"
+}

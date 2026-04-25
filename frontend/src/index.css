@@ -1,15 +1,15 @@
 :root {
-  --bg: #0d1117;
-  --bg2: #161b22;
-  --border: #30363d;
-  --text: #c9d1d9;
-  --muted: #8b949e;
-  --accent: #58a6ff;
-  --accent2: #79c0ff;
-  --red: #f85149;
-  --orange: #f0883e;
-  --yellow: #d29922;
-  --green: #3fb950;
+  --bg: var(--bg-primary, #0a0e27);
+  --bg2: var(--bg-secondary, #1a1f3a);
+  --border: var(--border-color, #2d3547);
+  --text: var(--text-primary, #ffffff);
+  --muted: var(--text-secondary, #b0b5c7);
+  --accent: var(--accent-primary, #00d9ff);
+  --accent2: var(--accent-secondary, #7c3aed);
+  --red: var(--error-color, #ef4444);
+  --orange: var(--warning-color, #f59e0b);
+  --yellow: #f59e0b;
+  --green: var(--success-color, #10b981);
   --r: 6px;
   --font: "Segoe UI", system-ui, sans-serif;
 }
@@ -40,7 +40,7 @@ button {
 code {
   font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
   font-size: 0.85em;
-  background: #21262d;
+  background: #252d47;
   padding: 0.1em 0.35em;
   border-radius: 3px;
 }

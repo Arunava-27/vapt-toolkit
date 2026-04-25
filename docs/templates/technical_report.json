@@ -1,0 +1,34 @@
+{
+  "sections": [
+    {
+      "title": "Technical Security Assessment",
+      "type": "header"
+    },
+    {
+      "show_all": true,
+      "type": "summary"
+    },
+    {
+      "show_details": true,
+      "type": "recon"
+    },
+    {
+      "show_details": true,
+      "type": "port_scan"
+    },
+    {
+      "show_all": true,
+      "type": "findings"
+    },
+    {
+      "show_details": true,
+      "type": "cves"
+    },
+    {
+      "show_all": true,
+      "type": "remediation"
+    }
+  ],
+  "name": "Detailed Technical Report",
+  "description": "Comprehensive technical findings for security teams"
+}

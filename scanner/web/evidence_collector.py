@@ -106,6 +106,9 @@ class WebVulnerabilityFinding:
     remediation_tips: List[str] = field(default_factory=list)  # How to fix this vulnerability
     compliance_impact: List[str] = field(default_factory=list)  # Affected standards (HIPAA, PCI-DSS, etc)
     
+    # Manual verification
+    verification_hints: Dict[str, Any] = field(default_factory=dict)  # Manual verification hints
+    
     def __post_init__(self):
         """Generate ID and fingerprint after initialization"""
         if not self.finding_id:
@@ -131,6 +134,23 @@ class WebVulnerabilityFinding:
                         self.cvss_score = classifier._estimate_score_from_severity(self.severity)
                 except Exception as e:
                     logger.debug(f"Failed to auto-populate compliance fields: {e}")
+        
+        # Auto-populate verification hints if available
+        if not self.verification_hints:
+            try:
+                from scanner.web.verification_hints import VerificationHints
+                hints = VerificationHints.get_hints_for_type(self.type)
+                if hints:
+                    self.verification_hints = {
+                        "title": hints.title,
+                        "description": hints.description,
+                        "steps": hints.steps,
+                        "tools": hints.tools,
+                        "expected_signs": hints.expected_signs,
+                        "false_positive_indicators": hints.false_positive_indicators
+                    }
+            except Exception as e:
+                logger.debug(f"Failed to auto-populate verification hints: {e}")
     
     def _generate_id(self) -> str:
         """Generate unique finding ID"""

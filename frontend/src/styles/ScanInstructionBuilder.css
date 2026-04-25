@@ -1,0 +1,479 @@
+.scan-instruction-builder {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.builder-header {
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.builder-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+}
+
+.builder-header p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 14px;
+}
+
+.builder-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.tab-button {
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+.tab-button.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.builder-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* JSON Editor Section */
+.editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.btn-toolbar {
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  color: #333;
+  transition: all 0.2s;
+}
+
+.btn-toolbar:hover:not(:disabled) {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.btn-toolbar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.json-editor {
+  flex: 1;
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  background: #fafbfc;
+  color: #333;
+  resize: none;
+  overflow-y: auto;
+}
+
+.json-editor:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Validation Status */
+.validation-status {
+  padding: 16px;
+  border-radius: 6px;
+  border-left: 4px solid;
+  background: #f8f9fa;
+  margin: 12px 0;
+}
+
+.validation-status.valid {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.validation-status.invalid {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.validation-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.validation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-weight: bold;
+  color: white;
+  font-size: 14px;
+}
+
+.validation-status.valid .validation-icon {
+  background: #22c55e;
+}
+
+.validation-status.invalid .validation-icon {
+  background: #ef4444;
+}
+
+.validation-errors,
+.validation-suggestions {
+  margin-top: 12px;
+}
+
+.validation-errors h5,
+.validation-suggestions h5 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.validation-errors ul,
+.validation-suggestions ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.validation-errors li,
+.validation-suggestions li {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.validation-status.invalid .validation-errors li {
+  color: #dc2626;
+}
+
+.validation-status .validation-suggestions li {
+  color: #0066cc;
+}
+
+/* Editor Actions */
+.editor-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn-primary {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 14px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-execute {
+  padding: 12px 32px;
+  font-size: 15px;
+}
+
+/* Templates Section */
+.templates-section {
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.template-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.template-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  transform: translateY(-2px);
+}
+
+.template-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.template-content {
+  flex: 1;
+  margin-bottom: 16px;
+}
+
+.template-name {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.template-desc {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.template-time {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #555;
+  font-weight: 500;
+}
+
+.btn-template-select {
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.btn-template-select:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Documentation Section */
+.docs-section {
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.docs-content {
+  max-width: 900px;
+}
+
+.docs-content h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: #667eea;
+  font-size: 18px;
+}
+
+.docs-content h4 {
+  margin-top: 20px;
+  margin-bottom: 12px;
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.docs-content p {
+  margin: 0 0 12px 0;
+  color: #666;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.docs-content ul {
+  margin: 0 0 12px 0;
+  padding-left: 24px;
+}
+
+.docs-content li {
+  margin: 6px 0;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.docs-content pre {
+  padding: 12px;
+  background: #f5f5f5;
+  border-left: 4px solid #667eea;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 12px 0;
+  color: #333;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .scan-instruction-builder {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .templates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-toolbar {
+    flex-direction: column;
+  }
+
+  .btn-toolbar {
+    width: 100%;
+  }
+
+  .builder-header {
+    padding: 12px;
+  }
+
+  .builder-header h2 {
+    font-size: 18px;
+  }
+
+  .json-editor {
+    padding: 12px;
+    font-size: 12px;
+  }
+}
+
+/* Dark mode support (if implemented) */
+@media (prefers-color-scheme: dark) {
+  .scan-instruction-builder {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  }
+
+  .editor-section,
+  .templates-section,
+  .docs-section,
+  .template-card {
+    background: #2a2a2a;
+    color: #e0e0e0;
+  }
+
+  .json-editor {
+    background: #1a1a1a;
+    color: #e0e0e0;
+    border-color: #444;
+  }
+
+  .btn-toolbar {
+    background: #3a3a3a;
+    color: #e0e0e0;
+    border-color: #444;
+  }
+
+  .template-name,
+  .docs-content h4 {
+    color: #e0e0e0;
+  }
+
+  .template-desc,
+  .docs-content p,
+  .docs-content li {
+    color: #b0b0b0;
+  }
+
+  .editor-toolbar {
+    background: #3a3a3a;
+    border-color: #444;
+  }
+
+  .validation-status {
+    background: #3a3a3a;
+    color: #e0e0e0;
+  }
+
+  .validation-status.valid {
+    background: #1a3a1a;
+  }
+
+  .validation-status.invalid {
+    background: #3a1a1a;
+  }
+
+  .docs-content pre {
+    background: #1a1a1a;
+    color: #e0e0e0;
+  }
+}

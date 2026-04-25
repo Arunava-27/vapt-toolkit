@@ -1,0 +1,20 @@
+[
+  {
+    "id": "preset-0",
+    "name": "Test Preset",
+    "targets": [
+      "example.com",
+      "192.168.1.1"
+    ],
+    "created_at": "E:\\personal\\vapt-toolkit"
+  },
+  {
+    "id": "preset-0",
+    "name": "Test Scope",
+    "targets": [
+      "example.com",
+      "192.168.1.1"
+    ],
+    "created_at": "E:\\personal\\vapt-toolkit"
+  }
+]

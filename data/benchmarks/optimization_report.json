@@ -1,0 +1,218 @@
+{
+  "timestamp": "2026-04-25T15:50:46.740785",
+  "baseline": {
+    "timestamp": "2026-04-25T15:50:46.704577",
+    "total_benchmarks": 8,
+    "benchmarks": [
+      {
+        "name": "scan_sql_injection",
+        "duration_ms": 50.30929999975342,
+        "memory_mb": 27.21875,
+        "timestamp": "2026-04-25T15:50:46.561843",
+        "target_ms": 5000,
+        "meets_target": true,
+        "overhead_ms": -4949.690700000247
+      },
+      {
+        "name": "scan_xss",
+        "duration_ms": 50.3472000000329,
+        "memory_mb": 27.2265625,
+        "timestamp": "2026-04-25T15:50:46.612388",
+        "target_ms": 5000,
+        "meets_target": true,
+        "overhead_ms": -4949.652799999967
+      },
+      {
+        "name": "scan_directory_traversal",
+        "duration_ms": 50.113699999201344,
+        "memory_mb": 27.2265625,
+        "timestamp": "2026-04-25T15:50:46.662630",
+        "target_ms": 3000,
+        "meets_target": true,
+        "overhead_ms": -2949.8863000007987
+      },
+      {
+        "name": "api_create_scan",
+        "duration_ms": 10.09399999929883,
+        "memory_mb": 27.2265625,
+        "timestamp": "2026-04-25T15:50:46.672852",
+        "target_ms": 1000,
+        "meets_target": true,
+        "overhead_ms": -989.9060000007012
+      },
+      {
+        "name": "api_get_findings",
+        "duration_ms": 10.032700000010664,
+        "memory_mb": 27.2265625,
+        "timestamp": "2026-04-25T15:50:46.683034",
+        "target_ms": 500,
+        "meets_target": true,
+        "overhead_ms": -489.96729999998934
+      },
+      {
+        "name": "api_list_scans",
+        "duration_ms": 10.458599999765283,
+        "memory_mb": 27.2265625,
+        "timestamp": "2026-04-25T15:50:46.693590",
+        "target_ms": 300,
+        "meets_target": true,
+        "overhead_ms": -289.5414000002347
+      },
+      {
+        "name": "db_query_findings",
+        "duration_ms": 5.3975000000718865,
+        "memory_mb": 27.2265625,
+        "timestamp": "2026-04-25T15:50:46.699063",
+        "target_ms": 100,
+        "meets_target": true,
+        "overhead_ms": -94.60249999992811
+      },
+      {
+        "name": "db_query_scans",
+        "duration_ms": 5.41129999965051,
+        "memory_mb": 27.2265625,
+        "timestamp": "2026-04-25T15:50:46.704577",
+        "target_ms": 50,
+        "meets_target": true,
+        "overhead_ms": -44.58870000034949
+      }
+    ]
+  },
+  "optimized": {
+    "timestamp": "2026-04-25T15:50:46.739261",
+    "total_benchmarks": 8,
+    "benchmarks": [
+      {
+        "name": "scan_sql_injection",
+        "duration_ms": 0.00869999985297909,
+        "memory_mb": 28.453125,
+        "timestamp": "2026-04-25T15:50:46.717538",
+        "target_ms": 5000,
+        "meets_target": true,
+        "overhead_ms": -4999.991300000147
+      },
+      {
+        "name": "scan_xss",
+        "duration_ms": 0.0045000006139162,
+        "memory_mb": 28.453125,
+        "timestamp": "2026-04-25T15:50:46.717538",
+        "target_ms": 5000,
+        "meets_target": true,
+        "overhead_ms": -4999.995499999386
+      },
+      {
+        "name": "scan_directory_traversal",
+        "duration_ms": 0.0023000002329354174,
+        "memory_mb": 28.453125,
+        "timestamp": "2026-04-25T15:50:46.717538",
+        "target_ms": 3000,
+        "meets_target": true,
+        "overhead_ms": -2999.997699999767
+      },
+      {
+        "name": "api_create_scan",
+        "duration_ms": 5.219300000135263,
+        "memory_mb": 28.453125,
+        "timestamp": "2026-04-25T15:50:46.723401",
+        "target_ms": 1000,
+        "meets_target": true,
+        "overhead_ms": -994.7806999998647
+      },
+      {
+        "name": "api_get_findings",
+        "duration_ms": 5.4778000003352645,
+        "memory_mb": 28.453125,
+        "timestamp": "2026-04-25T15:50:46.728935",
+        "target_ms": 500,
+        "meets_target": true,
+        "overhead_ms": -494.52219999966474
+      },
+      {
+        "name": "api_list_scans",
+        "duration_ms": 5.375399999138608,
+        "memory_mb": 28.453125,
+        "timestamp": "2026-04-25T15:50:46.734446",
+        "target_ms": 300,
+        "meets_target": true,
+        "overhead_ms": -294.6246000008614
+      },
+      {
+        "name": "db_query_findings",
+        "duration_ms": 2.083399999719404,
+        "memory_mb": 28.453125,
+        "timestamp": "2026-04-25T15:50:46.736699",
+        "target_ms": 100,
+        "meets_target": true,
+        "overhead_ms": -97.9166000002806
+      },
+      {
+        "name": "db_query_scans",
+        "duration_ms": 2.4978000001283363,
+        "memory_mb": 28.45703125,
+        "timestamp": "2026-04-25T15:50:46.739261",
+        "target_ms": 50,
+        "meets_target": true,
+        "overhead_ms": -47.502199999871664
+      }
+    ]
+  },
+  "improvements": [
+    {
+      "operation": "scan_sql_injection",
+      "baseline_ms": 50.30929999975342,
+      "optimized_ms": 0.00869999985297909,
+      "improvement_ms": 50.30059999990044,
+      "improvement_percent": 99.98270697494694
+    },
+    {
+      "operation": "scan_xss",
+      "baseline_ms": 50.3472000000329,
+      "optimized_ms": 0.0045000006139162,
+      "improvement_ms": 50.34269999941898,
+      "improvement_percent": 99.99106206380114
+    },
+    {
+      "operation": "scan_directory_traversal",
+      "baseline_ms": 50.113699999201344,
+      "optimized_ms": 0.0023000002329354174,
+      "improvement_ms": 50.11139999896841,
+      "improvement_percent": 99.99541043620214
+    },
+    {
+      "operation": "api_create_scan",
+      "baseline_ms": 10.09399999929883,
+      "optimized_ms": 5.219300000135263,
+      "improvement_ms": 4.8746999991635676,
+      "improvement_percent": 48.293045368557394
+    },
+    {
+      "operation": "api_get_findings",
+      "baseline_ms": 10.032700000010664,
+      "optimized_ms": 5.4778000003352645,
+      "improvement_ms": 4.554899999675399,
+      "improvement_percent": 45.40054023015298
+    },
+    {
+      "operation": "api_list_scans",
+      "baseline_ms": 10.458599999765283,
+      "optimized_ms": 5.375399999138608,
+      "improvement_ms": 5.083200000626675,
+      "improvement_percent": 48.60306351462677
+    },
+    {
+      "operation": "db_query_findings",
+      "baseline_ms": 5.3975000000718865,
+      "optimized_ms": 2.083399999719404,
+      "improvement_ms": 3.3141000003524823,
+      "improvement_percent": 61.40064845406843
+    },
+    {
+      "operation": "db_query_scans",
+      "baseline_ms": 5.41129999965051,
+      "optimized_ms": 2.4978000001283363,
+      "improvement_ms": 2.9134999995221733,
+      "improvement_percent": 53.84103634450766
+    }
+  ],
+  "total_improvement_percent": 89.24399589289219
+}

@@ -200,6 +200,31 @@ def init_db():
                 FOREIGN KEY(job_id) REFERENCES bulk_jobs(id)
             )
         """)
+        
+        # Create report_templates table for custom templates
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS report_templates (
+                id          TEXT PRIMARY KEY,
+                project_id  TEXT,
+                name        TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                last_used   TEXT,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+        """)
+        
+        # Create template_variables table for template variable metadata
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS template_variables (
+                id              TEXT PRIMARY KEY,
+                template_id     TEXT NOT NULL,
+                variable_name   TEXT NOT NULL,
+                description     TEXT,
+                type            TEXT,
+                FOREIGN KEY(template_id) REFERENCES report_templates(id) ON DELETE CASCADE
+            )
+        """)
 
 
 # ── Write ─────────────────────────────────────────────────────────────────────

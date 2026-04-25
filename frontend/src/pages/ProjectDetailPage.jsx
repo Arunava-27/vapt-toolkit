@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import ResultsDashboard from "../components/ResultsDashboard";
+import RiskHeatMap from "../components/RiskHeatMap";
 import "../App-compliance.css";
 
 function fmt(iso) {
@@ -16,6 +17,7 @@ export default function ProjectDetailPage() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
   const [selectedScanIdx, setSelectedScanIdx] = useState(-1);  // -1 = latest
+  const [activeTab, setActiveTab] = useState("results");  // "results" or "heatmap"
 
   useEffect(() => {
     fetch(`/api/projects/${id}`)
@@ -84,7 +86,49 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <ResultsDashboard results={results} collapsibleTables />
+      {/* Tab Navigation */}
+      <div className="tab-navigation" style={{ borderBottom: "2px solid #e5e7eb", marginTop: "24px" }}>
+        <button
+          className={`tab-button ${activeTab === "results" ? "active" : ""}`}
+          onClick={() => setActiveTab("results")}
+          style={{
+            padding: "12px 24px",
+            border: "none",
+            background: activeTab === "results" ? "#3b82f6" : "transparent",
+            color: activeTab === "results" ? "white" : "#6b7280",
+            cursor: "pointer",
+            fontWeight: activeTab === "results" ? "600" : "500",
+            fontSize: "14px",
+            borderRadius: "6px 6px 0 0",
+            marginRight: "8px"
+          }}
+        >
+          📊 Scan Results
+        </button>
+        <button
+          className={`tab-button ${activeTab === "heatmap" ? "active" : ""}`}
+          onClick={() => setActiveTab("heatmap")}
+          style={{
+            padding: "12px 24px",
+            border: "none",
+            background: activeTab === "heatmap" ? "#3b82f6" : "transparent",
+            color: activeTab === "heatmap" ? "white" : "#6b7280",
+            cursor: "pointer",
+            fontWeight: activeTab === "heatmap" ? "600" : "500",
+            fontSize: "14px",
+            borderRadius: "6px 6px 0 0",
+            marginRight: "8px"
+          }}
+        >
+          🔥 Risk Heat Map
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      <div style={{ marginTop: "0" }}>
+        {activeTab === "results" && <ResultsDashboard results={results} collapsibleTables />}
+        {activeTab === "heatmap" && <RiskHeatMap projectId={id} />}
+      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import ScanStatus       from "../components/ScanStatus";
 import ResultsDashboard from "../components/ResultsDashboard";
 import ResizableLayout  from "../components/ResizableLayout";
 import ScheduleManager  from "../components/ScheduleManager";
+import ScanInstructionBuilder from "../components/ScanInstructionBuilder";
 
 const DEFAULT_CONFIG = {
   target: "", recon: false, ports: false, cve: false, web: false,
@@ -64,6 +65,7 @@ export default function ScanPage() {
   const [warnings, setWarnings] = useState(null);
   const [pendingConfig, setPendingConfig] = useState(null);
   const [showScheduler, setShowScheduler] = useState(false);
+  const [scanMode, setScanMode] = useState("form"); // "form" or "json"
 
   const {
     scanning, canResume, log, results, moduleStatus,
@@ -110,34 +112,85 @@ export default function ScanPage() {
 
       <ResizableLayout sidebar={
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", height: "100%", overflowY: "auto" }}>
-          <ScanForm config={config} onChange={setConfig}
-            onScan={handleScan}
-            scanning={scanning} />
-          
-          {savedProject && (
-            <div style={{ padding: "1rem", borderRadius: 8, background: "var(--bg2)" }}>
-              <div style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
-                💾 Saved as <strong>{savedProject.name}</strong>
-              </div>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowScheduler(!showScheduler)}
-                style={{ width: "100%", marginBottom: "0.5rem" }}
-              >
-                {showScheduler ? "Hide" : "📅 Schedule"}
-              </button>
-              <Link className="save-banner-link" to={`/projects/${savedProject.id}`}
-                style={{ display: "block", textAlign: "center", marginBottom: "0.5rem" }}>
-                View project →
-              </Link>
-              <button className="btn-secondary" onClick={() => setSavedProject(null)} style={{ width: "100%" }}>
-                Clear
-              </button>
-            </div>
+          {/* Scan Mode Tabs */}
+          <div style={{
+            display: "flex",
+            gap: "0.5rem",
+            borderBottom: "2px solid var(--bg2)",
+            paddingBottom: "0.5rem",
+          }}>
+            <button
+              onClick={() => setScanMode("form")}
+              style={{
+                padding: "0.5rem 1rem",
+                background: scanMode === "form" ? "var(--accent)" : "transparent",
+                color: scanMode === "form" ? "var(--bg-primary)" : "var(--text)",
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                fontWeight: scanMode === "form" ? "600" : "400",
+                transition: "all 0.2s",
+              }}
+            >
+              📋 Scan Form
+            </button>
+            <button
+              onClick={() => setScanMode("json")}
+              style={{
+                padding: "0.5rem 1rem",
+                background: scanMode === "json" ? "var(--accent)" : "transparent",
+                color: scanMode === "json" ? "var(--bg-primary)" : "var(--text)",
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                fontWeight: scanMode === "json" ? "600" : "400",
+                transition: "all 0.2s",
+              }}
+            >
+              📝 Scan Instructions
+            </button>
+          </div>
+
+          {/* Form Mode */}
+          {scanMode === "form" && (
+            <>
+              <ScanForm config={config} onChange={setConfig}
+                onScan={handleScan}
+                scanning={scanning} />
+              
+              {savedProject && (
+                <div style={{ padding: "1rem", borderRadius: 8, background: "var(--bg2)" }}>
+                  <div style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+                    💾 Saved as <strong>{savedProject.name}</strong>
+                  </div>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setShowScheduler(!showScheduler)}
+                    style={{ width: "100%", marginBottom: "0.5rem" }}
+                  >
+                    {showScheduler ? "Hide" : "📅 Schedule"}
+                  </button>
+                  <Link className="save-banner-link" to={`/projects/${savedProject.id}`}
+                    style={{ display: "block", textAlign: "center", marginBottom: "0.5rem" }}>
+                    View project →
+                  </Link>
+                  <button className="btn-secondary" onClick={() => setSavedProject(null)} style={{ width: "100%" }}>
+                    Clear
+                  </button>
+                </div>
+              )}
+              
+              {savedProject && showScheduler && (
+                <ScheduleManager projectId={savedProject.id} />
+              )}
+            </>
           )}
-          
-          {savedProject && showScheduler && (
-            <ScheduleManager projectId={savedProject.id} />
+
+          {/* JSON Mode */}
+          {scanMode === "json" && (
+            <ScanInstructionBuilder onScanStart={handleScan} />
           )}
         </div>
       }>

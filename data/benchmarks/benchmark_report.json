@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-04-25T15:48:15.861840",
+  "total_benchmarks": 2,
+  "benchmarks": [
+    {
+      "name": "scan_sql_injection",
+      "duration_ms": 100.21510000024136,
+      "memory_mb": 25.875,
+      "timestamp": "2026-04-25T15:48:15.809967",
+      "target_ms": 5000,
+      "meets_target": true,
+      "overhead_ms": -4899.784899999759
+    },
+    {
+      "name": "api_get_findings",
+      "duration_ms": 50.51959999946121,
+      "memory_mb": 25.88671875,
+      "timestamp": "2026-04-25T15:48:15.860483",
+      "target_ms": 500,
+      "meets_target": true,
+      "overhead_ms": -449.4804000005388
+    }
+  ]
+}

@@ -27,6 +27,7 @@ from scanner.port_scanner import PortScanner
 from scanner.web_scanner import WebScanner
 from scanner.cve_scanner import CVEScanner
 from scanner.scope import validate_scope, normalize_target, get_scope_summary
+from scanner.scope_manager import ScopeManager, get_scope_manager
 from scanner.scan_logger import ScanLogger
 from scanner.web.web_scanner_orchestrator import WebVulnerabilityScanner, WebScanConfiguration
 from scanner.web.scan_comparison import ScanComparator
@@ -36,14 +37,31 @@ from scanner.notifications import get_notification_manager
 from scanner.webhooks import get_webhook_manager, WebhookEvent
 from scanner.reporters.executive_reporter import ExecutiveReporter
 from scanner.reporters.pdf_executive import ExecutivePDFGenerator
+from scanner.reporters.heatmap_generator import HeatMapGenerator
+from scanner.reporters.export_generator import ExportGenerator, ExportFormat
+from scanner.reporters.template_engine import TemplateEngine
+from scanner.reporters.templates import (EXECUTIVE_SUMMARY_TEMPLATE, TECHNICAL_REPORT_TEMPLATE,
+                                        COMPLIANCE_REPORT_TEMPLATE, RISK_ASSESSMENT_TEMPLATE,
+                                        REMEDIATION_ROADMAP_TEMPLATE)
 from database import (init_db, save_project, list_projects, get_project, rename_project, delete_project, dashboard_stats,
                      create_bulk_job, get_bulk_job, get_bulk_job_targets, update_bulk_job_status, update_bulk_job_timing,
                      update_bulk_job_counters, update_target_status, list_bulk_jobs, cancel_bulk_job,
                      get_schedule, update_schedule, delete_schedule, create_schedule, list_schedules,
                      save_fp_pattern, get_fp_patterns, update_fp_pattern_status, delete_fp_pattern)
+from scanner.reporters.template_engine import TemplateEngine
+from scanner.reporters.templates import (EXECUTIVE_SUMMARY_TEMPLATE, TECHNICAL_REPORT_TEMPLATE,
+                                        COMPLIANCE_REPORT_TEMPLATE, RISK_ASSESSMENT_TEMPLATE,
+                                        REMEDIATION_ROADMAP_TEMPLATE)
 from scanner.web.fp_pattern_database import FalsePositivePatternDB
+from scanner.json_scan_executor import JSONScanExecutor, JSONScanValidator
 from reporter.pdf_reporter import generate_pdf
 from wsl_config import wsl
+
+
+# ── Template Engine ───────────────────────────────────────────────────────────
+
+template_engine = TemplateEngine(db_conn_factory=True)
+
 
 
 # ── False Positive Pattern Database ──────────────────────────────────────────
@@ -110,6 +128,14 @@ bulk_scanner = BulkScanner(
     max_parallel=10,
     scan_callback=_execute_scan_for_bulk
 )
+
+# ── JSON Scan Executor ────────────────────────────────────────────────────────
+
+json_scan_executor = JSONScanExecutor()
+json_scan_validator = JSONScanValidator()
+
+# Placeholder for templates - will be initialized after models are defined
+SCAN_TEMPLATES = []
 
 # ── Background scan registry ──────────────────────────────────────────────────
 
@@ -239,6 +265,33 @@ class ComparisonRequest(BaseModel):
     confidence_min: Optional[int] = None  # Minimum confidence score (0-100)
 
 
+# ── Scope Management Models ───────────────────────────────────────────────
+
+class ScopeValidationRequest(BaseModel):
+    """Request to validate scope targets."""
+    targets: list[str]
+
+
+class ScopeExportRequest(BaseModel):
+    """Request to export scope."""
+    targets: list[str]
+    format: str = "json"  # json, yaml, txt
+
+
+class ScopePresetRequest(BaseModel):
+    """Request to save or load scope preset."""
+    name: str
+    targets: list[str]
+
+
+class ScopePresetResponse(BaseModel):
+    """Response with preset information."""
+    id: str
+    name: str
+    targets: list[str]
+    created_at: str
+
+
 # ── API Key Authentication ────────────────────────────────────────────────────
 
 class ScheduleRequest(BaseModel):
@@ -260,6 +313,163 @@ class CreateApiKeyResponse(BaseModel):
     project_id: str
     created_at: str
     warning: str = "Store this key securely. You won't be able to see it again!"
+
+
+# ── JSON Scan Instruction Models ──────────────────────────────────────────
+
+class JSONScanRequest(BaseModel):
+    """Request to start a scan from JSON instruction."""
+    json_instruction: str  # Raw JSON string or dict
+    project_name: Optional[str] = None
+    project_id: Optional[str] = None
+
+
+class JSONScanValidationRequest(BaseModel):
+    """Request to validate JSON scan instruction."""
+    json_instruction: str
+
+
+class JSONScanResponse(BaseModel):
+    """Response for JSON scan execution."""
+    scan_id: str
+    status: str
+    estimated_time_seconds: int
+    message: str
+
+
+class JSONScanValidationResponse(BaseModel):
+    """Response for JSON validation."""
+    is_valid: bool
+    errors: list[str] = []
+    suggestions: list[str] = []
+
+
+class ScanTemplate(BaseModel):
+    """Pre-built scan template."""
+    id: str
+    name: str
+    description: str
+    icon: str  # emoji or icon name
+    json_instruction: dict
+    estimated_time_seconds: int
+
+
+# ── Initialize Scan Templates (now that ScanTemplate model is defined) ────────
+
+SCAN_TEMPLATES = [
+    ScanTemplate(
+        id="quick-scan",
+        name="Quick Scan",
+        description="Fast surface-level scan (5-10 min)",
+        icon="⚡",
+        json_instruction={
+            "name": "Quick Scan - {target}",
+            "description": "Fast surface-level vulnerability scan",
+            "target": "",
+            "scope": [],
+            "modules": ["xss", "sqli", "headers"],
+            "depth": "quick",
+            "concurrency": 8,
+            "timeout": 300,
+            "notifications": {
+                "severity_filter": "high",
+                "channels": ["desktop"]
+            }
+        },
+        estimated_time_seconds=300
+    ),
+    ScanTemplate(
+        id="full-audit",
+        name="Full Audit",
+        description="Comprehensive security audit (30-60 min)",
+        icon="🔍",
+        json_instruction={
+            "name": "Full Audit - {target}",
+            "description": "Comprehensive security assessment",
+            "target": "",
+            "scope": [],
+            "modules": ["all"],
+            "depth": "full",
+            "concurrency": 5,
+            "timeout": 3600,
+            "notifications": {
+                "severity_filter": "medium",
+                "channels": ["desktop", "email"]
+            },
+            "export": {
+                "formats": ["pdf", "json", "csv"],
+                "send_email": True
+            }
+        },
+        estimated_time_seconds=1800
+    ),
+    ScanTemplate(
+        id="api-test",
+        name="API Security Test",
+        description="REST/GraphQL API security assessment",
+        icon="🔗",
+        json_instruction={
+            "name": "API Test - {target}",
+            "description": "API endpoint security assessment",
+            "target": "",
+            "scope": [],
+            "modules": ["sqli", "xss", "csrf", "auth"],
+            "depth": "full",
+            "concurrency": 10,
+            "timeout": 900,
+            "advanced": {
+                "auth_type": "bearer",
+                "skip_robots_txt": True
+            }
+        },
+        estimated_time_seconds=900
+    ),
+    ScanTemplate(
+        id="compliance-scan",
+        name="Compliance Scan",
+        description="OWASP Top 10, CWE focus (20-30 min)",
+        icon="⚖️",
+        json_instruction={
+            "name": "Compliance Scan - {target}",
+            "description": "OWASP Top 10 and CWE compliance check",
+            "target": "",
+            "scope": [],
+            "modules": ["sqli", "xss", "csrf", "idor", "auth", "headers"],
+            "depth": "full",
+            "concurrency": 5,
+            "timeout": 1200,
+            "export": {
+                "formats": ["pdf", "json"],
+                "send_email": True
+            }
+        },
+        estimated_time_seconds=1200
+    ),
+    ScanTemplate(
+        id="ci-cd-scan",
+        name="CI/CD Pipeline Scan",
+        description="Automated scan for CI/CD integration",
+        icon="🔄",
+        json_instruction={
+            "name": "CI/CD Scan - {target}",
+            "description": "Automated security scan for CI/CD pipeline",
+            "target": "",
+            "scope": [],
+            "modules": ["xss", "sqli", "csrf"],
+            "depth": "medium",
+            "concurrency": 10,
+            "timeout": 600,
+            "notifications": {
+                "severity_filter": "high",
+                "channels": ["slack"]
+            },
+            "export": {
+                "formats": ["json", "csv"]
+            }
+        },
+        estimated_time_seconds=600
+    )
+]
 
 
 # ── Webhook Models ────────────────────────────────────────────────────────────
@@ -411,6 +621,130 @@ async def validate_scan(req: ScanRequest):
         })
 
     return {"warnings": warnings}
+
+
+# ── JSON Scan Instructions ────────────────────────────────────────────────────
+
+@app.post("/api/scans/json/validate")
+async def validate_json_scan(req: JSONScanValidationRequest) -> JSONScanValidationResponse:
+    """Validate a JSON scan instruction."""
+    is_valid, errors = json_scan_validator.validate_json(req.json_instruction)
+    suggestions = json_scan_executor.suggest_corrections(req.json_instruction) if not is_valid else []
+    
+    return JSONScanValidationResponse(
+        is_valid=is_valid,
+        errors=errors,
+        suggestions=suggestions
+    )
+
+
+@app.post("/api/scans/json/from-json")
+async def start_scan_from_json(req: JSONScanRequest) -> JSONScanResponse:
+    """Start a scan from JSON instruction."""
+    # Parse and validate JSON instruction
+    json_data = req.json_instruction
+    
+    if isinstance(json_data, str):
+        try:
+            json_data = json.loads(json_data)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+    
+    # Validate before parsing
+    instruction = json_scan_executor.parse_json_instruction(json_data)
+    if not instruction:
+        is_valid, errors = json_scan_validator.validate(json_data)
+        logger.error(f"Failed to parse instruction. Validation errors: {errors}")
+        raise HTTPException(status_code=400, detail=f"Invalid scan instruction: {errors}")
+    
+    # Estimate time based on depth
+    depth_times = {"quick": 300, "medium": 900, "full": 1800}
+    estimated_time = depth_times.get(instruction.depth, 900)
+    
+    # Create scan config from instruction
+    config = {
+        "target": instruction.target,
+        "recon": "recon" in instruction.modules or "all" in instruction.modules,
+        "ports": "ports" in instruction.modules or "all" in instruction.modules,
+        "web": any(m in instruction.modules for m in ["xss", "sqli", "csrf", "idor", "headers", "auth"]) or "all" in instruction.modules,
+        "cve": "cve" in instruction.modules or "all" in instruction.modules,
+        "full_scan": False,
+        "scan_classification": "active",
+        "port_range": "top-1000",
+        "web_depth": {"quick": 1, "medium": 2, "full": 3}.get(instruction.depth, 2),
+        "web_vulnerability_scan": True,
+        "web_test_xss": "xss" in instruction.modules or "all" in instruction.modules,
+        "web_test_injection": "sqli" in instruction.modules or "all" in instruction.modules,
+        "web_test_auth": "auth" in instruction.modules or "all" in instruction.modules,
+        "web_test_idor": "idor" in instruction.modules or "all" in instruction.modules,
+        "web_test_csrf_ssrf": "csrf" in instruction.modules or "all" in instruction.modules,
+        "web_test_file_upload": "file_upload" in instruction.modules or "all" in instruction.modules,
+        "web_test_misconfiguration": "headers" in instruction.modules or "all" in instruction.modules,
+        "web_test_sensitive_data": "all" in instruction.modules,
+        "web_test_business_logic": "all" in instruction.modules,
+        "web_test_rate_limiting": "all" in instruction.modules,
+        "scope": instruction.scope,
+        "override_robots_txt": instruction.advanced_config.skip_robots_txt,
+        "project_name": req.project_name or instruction.name,
+        "notification_config": {
+            "severity_filter": instruction.notifications.severity_filter,
+            "channels": instruction.notifications.channels,
+            "email": instruction.notifications.email,
+            "finding_types": "all"
+        }
+    }
+    
+    # Create scan state
+    scan_id = str(uuid.uuid4())
+    state = ScanState(
+        scan_id=scan_id,
+        target=instruction.target,
+        config=config,
+        project_id=req.project_id,
+        project_name=req.project_name or instruction.name,
+        notification_config=config["notification_config"]
+    )
+    
+    ACTIVE_SCANS[scan_id] = state
+    
+    # Start scan in background
+    async def run_scan():
+        await _execute_scan(state)
+    
+    state.task = asyncio.create_task(run_scan())
+    
+    return JSONScanResponse(
+        scan_id=scan_id,
+        status="running",
+        estimated_time_seconds=estimated_time,
+        message=f"Scan '{instruction.name}' started. Target: {instruction.target}"
+    )
+
+
+@app.get("/api/scans/json/templates")
+async def get_scan_templates() -> dict:
+    """Get pre-built scan templates."""
+    return {
+        "templates": [
+            {
+                "id": t.id,
+                "name": t.name,
+                "description": t.description,
+                "icon": t.icon,
+                "estimated_time_seconds": t.estimated_time_seconds,
+                "json_instruction": t.json_instruction
+            }
+            for t in SCAN_TEMPLATES
+        ]
+    }
+
+
+@app.get("/api/scans/json/schema")
+async def get_json_schema() -> dict:
+    """Get JSON schema for validation."""
+    return json_scan_executor.get_schema()
+
 
 
 # ── Background scan task ──────────────────────────────────────────────────────
@@ -882,6 +1216,249 @@ async def api_export_pdf(pid: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/api/exports/scan/{pid}")
+async def api_export_scan(
+    pid: str,
+    format: str = "json",
+    include_metadata: bool = True,
+    include_evidence: bool = True,
+    severity: str = None,
+    confidence: str = None,
+):
+    """Export scan results in various formats."""
+    try:
+        p = get_project(pid)
+        if not p:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Build scan data from latest scan
+        scans = p.get("scans", [])
+        if not scans:
+            raise HTTPException(status_code=404, detail="No scans found for this project")
+
+        latest_scan = scans[-1]
+        scan_data = {
+            "config": latest_scan.get("config", {}),
+            "results": latest_scan.get("results", {}),
+            "timestamp": latest_scan.get("timestamp", datetime.now().isoformat()),
+        }
+
+        # Create exporter
+        exporter = ExportGenerator(scan_data)
+
+        # Validate format
+        try:
+            export_format = ExportFormat(format.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+
+        # Generate export
+        loop = asyncio.get_event_loop()
+        exported_data = await loop.run_in_executor(
+            None,
+            exporter.export,
+            export_format,
+            include_metadata,
+            include_evidence,
+            severity,
+            confidence,
+        )
+
+        # Determine response based on format
+        if export_format == ExportFormat.JSON:
+            return Response(
+                content=exported_data,
+                media_type="application/json",
+                headers={"Content-Disposition": f'attachment; filename="scan-export.json"'},
+            )
+        elif export_format == ExportFormat.CSV:
+            return Response(
+                content=exported_data,
+                media_type="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="scan-export.csv"'},
+            )
+        elif export_format == ExportFormat.HTML:
+            return Response(
+                content=exported_data,
+                media_type="text/html",
+                headers={"Content-Disposition": f'attachment; filename="scan-export.html"'},
+            )
+        elif export_format == ExportFormat.MARKDOWN:
+            return Response(
+                content=exported_data,
+                media_type="text/markdown",
+                headers={"Content-Disposition": f'attachment; filename="scan-export.md"'},
+            )
+        elif export_format == ExportFormat.SARIF:
+            return Response(
+                content=exported_data,
+                media_type="application/json",
+                headers={"Content-Disposition": f'attachment; filename="scan-export.sarif.json"'},
+            )
+        elif export_format == ExportFormat.XLSX:
+            return Response(
+                content=exported_data,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename="scan-export.xlsx"'},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Export error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/exports/bulk")
+async def api_export_bulk(
+    project_ids: list = None,
+    format: str = "json",
+    include_metadata: bool = True,
+):
+    """Export multiple scans in specified format."""
+    try:
+        if not project_ids:
+            all_projects = list_projects()
+            project_ids = [p["id"] for p in all_projects]
+
+        exports = []
+        for pid in project_ids[:50]:  # Limit to 50 projects
+            p = get_project(pid)
+            if not p:
+                continue
+
+            scans = p.get("scans", [])
+            if not scans:
+                continue
+
+            latest_scan = scans[-1]
+            scan_data = {
+                "config": latest_scan.get("config", {}),
+                "results": latest_scan.get("results", {}),
+                "timestamp": latest_scan.get("timestamp", datetime.now().isoformat()),
+            }
+
+            exporter = ExportGenerator(scan_data)
+            loop = asyncio.get_event_loop()
+            exported = await loop.run_in_executor(
+                None,
+                exporter.export,
+                ExportFormat(format.lower()),
+                include_metadata,
+                False,  # No evidence for bulk exports
+                None,
+                None,
+            )
+
+            exports.append({
+                "project_id": pid,
+                "target": p.get("target"),
+                "data": exported if format.lower() != "json" else json.loads(exported),
+            })
+
+        response_data = {
+            "format": format,
+            "count": len(exports),
+            "exports": exports,
+        }
+
+        return Response(
+            content=json.dumps(response_data),
+            media_type="application/json",
+        )
+
+    except Exception as e:
+        logger.error(f"Bulk export error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/exports/templates")
+async def api_get_export_templates():
+    """Get list of available export templates."""
+    return {
+        "templates": [
+            {
+                "format": "json",
+                "name": "JSON",
+                "description": "Pretty JSON with full details and metadata",
+                "use_case": "Data analysis, integration, archival",
+            },
+            {
+                "format": "csv",
+                "name": "CSV",
+                "description": "Spreadsheet-compatible findings grid",
+                "use_case": "Excel, import to other tools",
+            },
+            {
+                "format": "html",
+                "name": "HTML",
+                "description": "Standalone interactive report",
+                "use_case": "Sharing via email, web view",
+            },
+            {
+                "format": "xlsx",
+                "name": "Excel",
+                "description": "Professional multi-sheet workbook with formatting",
+                "use_case": "Professional reports, executive summaries",
+            },
+            {
+                "format": "markdown",
+                "name": "Markdown",
+                "description": "GitHub and documentation compatible",
+                "use_case": "GitHub repositories, wikis, documentation",
+            },
+            {
+                "format": "sarif",
+                "name": "SARIF",
+                "description": "GitHub Security Alerts format",
+                "use_case": "GitHub integration, CI/CD workflows",
+            },
+        ]
+    }
+
+
+@app.get("/api/findings/{finding_id}/hints")
+async def api_get_finding_hints(finding_id: str):
+    """Get manual verification hints for a specific finding."""
+    try:
+        from scanner.web.verification_hints import VerificationHints
+        
+        # Search through all projects to find the finding
+        all_projects = list_projects()
+        for project in all_projects:
+            pid = project["id"]
+            p = get_project(pid)
+            if not p or not p.get("scans"):
+                continue
+            
+            for scan in p["scans"]:
+                results = scan.get("results", {})
+                web_vulns = results.get("web_vulnerabilities", {}).get("findings", [])
+                
+                for finding in web_vulns:
+                    if finding.get("finding_id") == finding_id:
+                        finding_type = finding.get("type")
+                        hints = VerificationHints.get_hints_for_type(finding_type)
+                        
+                        if hints:
+                            return {
+                                "finding_id": finding_id,
+                                "finding_type": finding_type,
+                                "hints": {
+                                    "title": hints.title,
+                                    "description": hints.description,
+                                    "steps": hints.steps,
+                                    "tools": hints.tools,
+                                    "expected_signs": hints.expected_signs,
+                                    "false_positive_indicators": hints.false_positive_indicators
+                                }
+                            }
+        
+        raise HTTPException(status_code=404, detail="Finding not found")
+    except Exception as e:
+        logger.error(f"Error retrieving hints for finding {finding_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve hints")
 
 
 @app.post("/api/compare/scans")
@@ -2193,6 +2770,463 @@ async def get_fp_pattern_stats(
         }
     except Exception as e:
         logger.error(f"Error getting FP stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Heat Map Report Endpoints ────────────────────────────────────────────────
+
+@app.get("/api/reports/heatmap/by-target")
+async def get_heatmap_by_target(
+    projectId: str,
+    start_date: str = None,
+    end_date: str = None
+):
+    """Get heat map data organized by target and severity."""
+    project = get_project(projectId)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    scans = project.get("scans", [])
+    if not scans:
+        raise HTTPException(status_code=404, detail="No scans available for this project")
+    
+    # Extract scan results
+    scan_results = [scan.get("results", {}) for scan in scans]
+    
+    def generate_heatmap():
+        generator = HeatMapGenerator()
+        return generator.generate_by_target(scan_results, start_date, end_date)
+    
+    loop = asyncio.get_event_loop()
+    heatmap_data = await loop.run_in_executor(None, generate_heatmap)
+    
+    return heatmap_data
+
+
+@app.get("/api/reports/heatmap/by-time")
+async def get_heatmap_by_time(
+    projectId: str,
+    target: str = None,
+    period: str = "week"
+):
+    """Get time-series heat map data."""
+    project = get_project(projectId)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    scans = project.get("scans", [])
+    if not scans:
+        raise HTTPException(status_code=404, detail="No scans available for this project")
+    
+    # Extract scan results
+    scan_results = [scan.get("results", {}) for scan in scans]
+    
+    def generate_heatmap():
+        generator = HeatMapGenerator()
+        return generator.generate_by_time(scan_results, target, period)
+    
+    loop = asyncio.get_event_loop()
+    heatmap_data = await loop.run_in_executor(None, generate_heatmap)
+    
+    return heatmap_data
+
+
+@app.get("/api/reports/heatmap/by-severity")
+async def get_heatmap_by_severity(projectId: str):
+    """Get severity distribution heat map."""
+    project = get_project(projectId)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    scans = project.get("scans", [])
+    if not scans:
+        raise HTTPException(status_code=404, detail="No scans available for this project")
+    
+    # Extract all findings
+    findings = []
+    for scan in scans:
+        results = scan.get("results", {})
+        
+        # Web vulnerabilities
+        web_vulns = results.get("web_vulnerabilities", {})
+        if isinstance(web_vulns, dict):
+            findings.extend(web_vulns.get("findings", []))
+        
+        # CVE findings
+        cve_data = results.get("cve", {})
+        for corr in cve_data.get("correlations", []):
+            for cve in corr.get("cves", []):
+                findings.append({
+                    "type": "CVE",
+                    "title": cve.get("id", "Unknown"),
+                    "severity": cve.get("severity", "Medium"),
+                    "description": cve.get("description", ""),
+                    "cvss_score": cve.get("cvss_score", 0),
+                })
+    
+    def generate_heatmap():
+        generator = HeatMapGenerator()
+        return generator.generate_by_severity(findings)
+    
+    loop = asyncio.get_event_loop()
+    heatmap_data = await loop.run_in_executor(None, generate_heatmap)
+    
+    return heatmap_data
+
+
+@app.get("/api/reports/heatmap/by-type")
+async def get_heatmap_by_type(projectId: str):
+    """Get heat map data organized by vulnerability type and severity."""
+    project = get_project(projectId)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    scans = project.get("scans", [])
+    if not scans:
+        raise HTTPException(status_code=404, detail="No scans available for this project")
+    
+    # Extract scan results
+    scan_results = [scan.get("results", {}) for scan in scans]
+    
+    def generate_heatmap():
+        generator = HeatMapGenerator()
+        return generator.generate_by_vulnerability_type(scan_results)
+    
+    loop = asyncio.get_event_loop()
+    heatmap_data = await loop.run_in_executor(None, generate_heatmap)
+    
+    return heatmap_data
+
+
+# ── Scope Management Endpoints ────────────────────────────────────────────
+
+@app.post("/api/scans/scope/validate")
+async def validate_scope_endpoint(request: ScopeValidationRequest):
+    """
+    Validate scope targets.
+    
+    Returns validation status and any errors found.
+    """
+    try:
+        scope_manager = get_scope_manager()
+        parsed = scope_manager.parse_scope(request.targets)
+        
+        valid = len(parsed.errors) == 0
+        return {
+            "valid": valid,
+            "errors": parsed.errors,
+            "valid_count": len(parsed),
+            "total_count": len(request.targets),
+            "targets": [t.to_dict() for t in parsed.targets],
+        }
+    except Exception as e:
+        logger.error(f"Error validating scope: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/scans/scope/presets")
+async def get_scope_presets():
+    """
+    Get all saved scope presets.
+    """
+    try:
+        scope_manager = get_scope_manager()
+        presets = scope_manager.load_presets()
+        return {
+            "presets": [
+                {
+                    "id": p.get("id"),
+                    "name": p.get("name"),
+                    "targets": p.get("targets", []),
+                    "created_at": p.get("created_at"),
+                }
+                for p in presets
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error loading presets: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/scans/scope/presets")
+async def save_scope_preset(request: ScopePresetRequest):
+    """
+    Save a new scope preset.
+    """
+    try:
+        if not request.name.strip():
+            raise HTTPException(status_code=400, detail="Preset name cannot be empty")
+        
+        if not request.targets:
+            raise HTTPException(status_code=400, detail="Preset must have at least one target")
+        
+        scope_manager = get_scope_manager()
+        preset_id = scope_manager.save_preset(request.name, request.targets)
+        
+        return {
+            "id": preset_id,
+            "name": request.name,
+            "targets": request.targets,
+            "created_at": datetime.now().isoformat(),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving preset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/scans/scope/presets/{preset_id}")
+async def delete_scope_preset(preset_id: str):
+    """
+    Delete a scope preset.
+    """
+    try:
+        scope_manager = get_scope_manager()
+        deleted = scope_manager.delete_preset(preset_id)
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Preset not found")
+        
+        return {"message": "Preset deleted successfully", "preset_id": preset_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting preset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/scans/scope/expand")
+async def expand_scope(request: ScopeValidationRequest):
+    """
+    Expand scope targets (handle wildcards and CIDR notation).
+    
+    Returns expanded list of targets.
+    """
+    try:
+        scope_manager = get_scope_manager()
+        expanded = scope_manager.expand_scope(request.targets)
+        
+        return {
+            "original": request.targets,
+            "expanded": expanded,
+            "count_original": len(request.targets),
+            "count_expanded": len(expanded),
+        }
+    except Exception as e:
+        logger.error(f"Error expanding scope: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/scans/scope/export")
+async def export_scope(request: ScopeExportRequest):
+    """
+    Export scope in specified format (json, yaml, txt).
+    """
+    try:
+        if request.format not in ("json", "yaml", "txt"):
+            raise HTTPException(status_code=400, detail=f"Invalid format: {request.format}")
+        
+        scope_manager = get_scope_manager()
+        content = scope_manager.export_scope(request.targets, request.format)
+        
+        return {
+            "format": request.format,
+            "content": content,
+            "target_count": len(request.targets),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting scope: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
+
+# ── Report Template Endpoints ─────────────────────────────────────────────────
+
+@app.get("/api/templates/report")
+async def list_report_templates(projectId: str = None):
+    """List available report templates."""
+    try:
+        templates = template_engine.list_templates(projectId)
+        return {
+            "templates": templates,
+            "total": len(templates),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error listing templates: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/templates/report")
+async def create_report_template(request: dict):
+    """Create a new custom report template."""
+    try:
+        name = request.get("name")
+        content = request.get("content")
+        project_id = request.get("project_id")
+        
+        if not name or not content:
+            raise HTTPException(status_code=400, detail="Name and content required")
+        
+        template_id = template_engine.create_template(name, content, project_id)
+        return {
+            "id": template_id,
+            "name": name,
+            "created_at": datetime.now().isoformat(),
+            "message": "Template created successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating template: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/templates/report/{template_id}/preview")
+async def get_template_preview(template_id: str, projectId: str = None):
+    """Get preview of a template with sample data."""
+    try:
+        project = None
+        sample_data = None
+        
+        if projectId:
+            project = get_project(projectId)
+            if project and project.get("scans"):
+                latest_scan = project["scans"][-1]
+                sample_data = {
+                    "project_name": project.get("name", "Sample Project"),
+                    "target": project.get("target"),
+                    "timestamp": latest_scan.get("timestamp"),
+                    **latest_scan.get("results", {})
+                }
+        
+        preview_html = template_engine.get_template_preview(template_id, sample_data)
+        return {"preview": preview_html}
+    except Exception as e:
+        logger.error(f"Error generating preview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/templates/report/{template_id}/apply")
+async def apply_report_template(template_id: str, request: dict):
+    """Apply template to scan results and generate report."""
+    try:
+        project_id = request.get("project_id")
+        scan_index = request.get("scan_index", -1)
+        
+        project = get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        scans = project.get("scans", [])
+        if not scans:
+            raise HTTPException(status_code=404, detail="No scans available")
+        
+        scan = scans[scan_index]
+        scan_data = {
+            "project_name": project.get("name"),
+            "target": project.get("target"),
+            "timestamp": scan.get("timestamp"),
+            **scan.get("results", {})
+        }
+        
+        rendered_html = template_engine.apply_template(template_id, scan_data)
+        return {
+            "report": rendered_html,
+            "project_id": project_id,
+            "template_id": template_id,
+            "generated_at": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying template: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/templates/report/{template_id}")
+async def delete_report_template(template_id: str):
+    """Delete a report template."""
+    try:
+        success = template_engine.delete_template(template_id)
+        if success:
+            return {"message": "Template deleted successfully", "template_id": template_id}
+        else:
+            raise HTTPException(status_code=404, detail="Template not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting template: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/templates/report/preset")
+async def save_template_preset(request: dict):
+    """Save a template preset configuration."""
+    try:
+        name = request.get("name")
+        config = request.get("config")
+        
+        if not name or not config:
+            raise HTTPException(status_code=400, detail="Name and config required")
+        
+        preset_id = template_engine.save_template_preset(name, config)
+        return {
+            "id": preset_id,
+            "name": name,
+            "created_at": datetime.now().isoformat(),
+            "message": "Preset saved successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving preset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/templates/report/prebuilt")
+async def get_prebuilt_templates():
+    """Get list of prebuilt templates."""
+    try:
+        prebuilt = [
+            {
+                "id": "executive_summary",
+                "name": "Executive Summary",
+                "description": "High-level overview for executives and stakeholders",
+                "use_case": "Executive management, board reviews"
+            },
+            {
+                "id": "technical_report",
+                "name": "Detailed Technical Report",
+                "description": "Comprehensive technical findings for security teams",
+                "use_case": "Security teams, detailed analysis"
+            },
+            {
+                "id": "compliance_report",
+                "name": "Compliance Report",
+                "description": "OWASP Top 10, CWE, and CVSS mapped findings",
+                "use_case": "Compliance audits, regulatory reporting"
+            },
+            {
+                "id": "risk_assessment",
+                "name": "Risk Assessment",
+                "description": "Risk-based prioritization and impact analysis",
+                "use_case": "Risk management, prioritization"
+            },
+            {
+                "id": "remediation_roadmap",
+                "name": "Remediation Roadmap",
+                "description": "Actionable remediation timeline and steps",
+                "use_case": "Remediation planning, timeline management"
+            }
+        ]
+        return {"templates": prebuilt}
+    except Exception as e:
+        logger.error(f"Error fetching prebuilt templates: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

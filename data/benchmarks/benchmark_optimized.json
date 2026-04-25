@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-04-25T15:50:46.739261",
+  "total_benchmarks": 8,
+  "benchmarks": [
+    {
+      "name": "scan_sql_injection",
+      "duration_ms": 0.00869999985297909,
+      "memory_mb": 28.453125,
+      "timestamp": "2026-04-25T15:50:46.717538",
+      "target_ms": 5000,
+      "meets_target": true,
+      "overhead_ms": -4999.991300000147
+    },
+    {
+      "name": "scan_xss",
+      "duration_ms": 0.0045000006139162,
+      "memory_mb": 28.453125,
+      "timestamp": "2026-04-25T15:50:46.717538",
+      "target_ms": 5000,
+      "meets_target": true,
+      "overhead_ms": -4999.995499999386
+    },
+    {
+      "name": "scan_directory_traversal",
+      "duration_ms": 0.0023000002329354174,
+      "memory_mb": 28.453125,
+      "timestamp": "2026-04-25T15:50:46.717538",
+      "target_ms": 3000,
+      "meets_target": true,
+      "overhead_ms": -2999.997699999767
+    },
+    {
+      "name": "api_create_scan",
+      "duration_ms": 5.219300000135263,
+      "memory_mb": 28.453125,
+      "timestamp": "2026-04-25T15:50:46.723401",
+      "target_ms": 1000,
+      "meets_target": true,
+      "overhead_ms": -994.7806999998647
+    },
+    {
+      "name": "api_get_findings",
+      "duration_ms": 5.4778000003352645,
+      "memory_mb": 28.453125,
+      "timestamp": "2026-04-25T15:50:46.728935",
+      "target_ms": 500,
+      "meets_target": true,
+      "overhead_ms": -494.52219999966474
+    },
+    {
+      "name": "api_list_scans",
+      "duration_ms": 5.375399999138608,
+      "memory_mb": 28.453125,
+      "timestamp": "2026-04-25T15:50:46.734446",
+      "target_ms": 300,
+      "meets_target": true,
+      "overhead_ms": -294.6246000008614
+    },
+    {
+      "name": "db_query_findings",
+      "duration_ms": 2.083399999719404,
+      "memory_mb": 28.453125,
+      "timestamp": "2026-04-25T15:50:46.736699",
+      "target_ms": 100,
+      "meets_target": true,
+      "overhead_ms": -97.9166000002806
+    },
+    {
+      "name": "db_query_scans",
+      "duration_ms": 2.4978000001283363,
+      "memory_mb": 28.45703125,
+      "timestamp": "2026-04-25T15:50:46.739261",
+      "target_ms": 50,
+      "meets_target": true,
+      "overhead_ms": -47.502199999871664
+    }
+  ]
+}

@@ -6,6 +6,9 @@ import ScanPage         from "./pages/ScanPage";
 import ProjectsPage     from "./pages/ProjectsPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 
+// Ensure dark mode is applied
+document.documentElement.setAttribute('data-theme', 'dark');
+
 function ScanIndicator() {
   const { scanning } = useScan();
   if (!scanning) return null;

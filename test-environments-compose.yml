@@ -1,0 +1,87 @@
+version: '3.8'
+
+# VAPT Toolkit - Test Environments Docker Compose
+# Provides DVWA, WebGoat, and Juice Shop for manual testing
+# Usage: docker-compose -f test-environments-compose.yml up -d
+
+services:
+  # Damn Vulnerable Web Application
+  dvwa:
+    image: vulnerables/web-dvwa
+    container_name: vapt-dvwa
+    ports:
+      - "80:80"
+      - "3306:3306"
+    environment:
+      MYSQL_PASS: "password"
+      MYSQL_ROOT_PASSWORD: "password"
+    networks:
+      - testing
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/DVWA/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      description: "Damn Vulnerable Web Application for testing SQLi, XSS, CSRF, etc."
+      url: "http://localhost/DVWA"
+      credentials: "admin / password"
+
+  # OWASP WebGoat
+  webgoat:
+    image: webgoat/goatandwolf
+    container_name: vapt-webgoat
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: "8080"
+    networks:
+      - testing
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/WebGoat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      description: "OWASP WebGoat - Interactive security training"
+      url: "http://localhost:8080/WebGoat"
+
+  # OWASP Juice Shop
+  juice-shop:
+    image: bkimminich/juice-shop
+    container_name: vapt-juice-shop
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: "production"
+    networks:
+      - testing
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      description: "OWASP Juice Shop - Vulnerable web application"
+      url: "http://localhost:3000"
+      credentials: "admin@juice-sh.op / admin123"
+
+networks:
+  testing:
+    driver: bridge
+    name: vapt-testing-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Health check summary
+# After startup, verify environments with:
+# curl http://localhost/DVWA/
+# curl http://localhost:8080/WebGoat
+# curl http://localhost:3000
