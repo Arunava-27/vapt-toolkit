@@ -842,6 +842,7 @@ async def _execute_scan(state: ScanState):
         # Passive: recon + cve (non-intrusive)
         # Active: ports + web + cve (intrusive probing)
         # Hybrid: all modules
+        is_active = req.scan_classification == "active"
         is_passive = req.scan_classification == "passive"
         is_hybrid = req.scan_classification == "hybrid" or req.full_scan
 
