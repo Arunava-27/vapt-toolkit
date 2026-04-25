@@ -1,0 +1,173 @@
+.step-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.goal-card {
+  padding: 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: white;
+}
+
+.goal-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+  transform: translateY(-2px);
+}
+
+.goal-card.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.goal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.goal-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+.risk-label {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.color-green .risk-label {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.color-orange .risk-label {
+  background: #fed7aa;
+  color: #92400e;
+}
+
+.color-red .risk-label {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
+.color-darkred .risk-label {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.color-blue .risk-label {
+  background: #dbeafe;
+  color: #0c2340;
+}
+
+.color-gray .risk-label {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.goal-description {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.goal-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.time {
+  flex: 1;
+}
+
+.classification {
+  font-weight: 500;
+}
+
+.goal-summary {
+  padding: 16px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.goal-summary h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #065f46;
+  font-weight: 600;
+}
+
+.goal-summary p {
+  margin: 0;
+  font-size: 13px;
+  color: #047857;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .goal-card {
+    background: #374151;
+    border-color: #4b5563;
+  }
+
+  .goal-card:hover {
+    border-color: #60a5fa;
+    box-shadow: 0 4px 12px rgba(96, 165, 250, 0.1);
+  }
+
+  .goal-card.selected {
+    background: #1e3a8a;
+    border-color: #60a5fa;
+  }
+
+  .goal-header {
+    border-color: #4b5563;
+  }
+
+  .goal-title {
+    color: #f3f4f6;
+  }
+
+  .goal-description {
+    color: #d1d5db;
+  }
+
+  .goal-meta {
+    color: #9ca3af;
+  }
+
+  .goal-summary {
+    background: #064e3b;
+    border-color: #10b981;
+  }
+
+  .goal-summary h4,
+  .goal-summary p {
+    color: #d1fae5;
+  }
+}

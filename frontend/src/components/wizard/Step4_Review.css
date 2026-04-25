@@ -1,0 +1,218 @@
+.step-review {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.review-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.review-card {
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  display: flex;
+  gap: 16px;
+}
+
+.card-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.card-content {
+  flex: 1;
+}
+
+.card-content h4 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.card-value {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+.card-description {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.target-list-small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.target-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  color: #374151;
+}
+
+.modules-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.module-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #dbeafe;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #0c2340;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.risk-assessment {
+  margin: 0 0 8px 0;
+}
+
+.risk-indicator {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.review-notes {
+  padding: 16px;
+  background: #fff7ed;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+}
+
+.review-notes h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.review-notes ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.review-notes li {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.review-notes strong {
+  font-weight: 600;
+}
+
+.review-actions {
+  text-align: center;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dbeafe 100%);
+  border-radius: 12px;
+}
+
+.btn-launch {
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.btn-launch:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+}
+
+.btn-launch:active {
+  transform: translateY(0);
+}
+
+.action-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #047857;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .review-card {
+    background: #374151;
+    border-color: #4b5563;
+  }
+
+  .card-content h4 {
+    color: #9ca3af;
+  }
+
+  .card-value {
+    color: #f3f4f6;
+  }
+
+  .card-description {
+    color: #d1d5db;
+  }
+
+  .target-badge {
+    background: #4b5563;
+    border-color: #6b7280;
+    color: #e5e7eb;
+  }
+
+  .module-badge {
+    background: #1e3a8a;
+    color: #bfdbfe;
+  }
+
+  .review-notes {
+    background: #78350f;
+    border-color: #f59e0b;
+  }
+
+  .review-notes h4,
+  .review-notes li {
+    color: #fef3c7;
+  }
+
+  .review-actions {
+    background: linear-gradient(135deg, #064e3b 0%, #0c2340 100%);
+  }
+
+  .action-hint {
+    color: #d1fae5;
+  }
+}

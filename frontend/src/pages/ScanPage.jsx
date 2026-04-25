@@ -8,6 +8,7 @@ import ResultsDashboard from "../components/ResultsDashboard";
 import ResizableLayout  from "../components/ResizableLayout";
 import ScheduleManager  from "../components/ScheduleManager";
 import ScanInstructionBuilder from "../components/ScanInstructionBuilder";
+import ScanWizard       from "../components/wizard/ScanWizard";
 
 const DEFAULT_CONFIG = {
   target: "", recon: false, ports: false, cve: false, web: false,
@@ -65,7 +66,8 @@ export default function ScanPage() {
   const [warnings, setWarnings] = useState(null);
   const [pendingConfig, setPendingConfig] = useState(null);
   const [showScheduler, setShowScheduler] = useState(false);
-  const [scanMode, setScanMode] = useState("form"); // "form" or "json"
+  const [scanMode, setScanMode] = useState("wizard"); // "wizard", "form" or "json"
+  const [showWizard, setShowWizard] = useState(false);
 
   const {
     scanning, canResume, log, results, moduleStatus,
@@ -75,23 +77,23 @@ export default function ScanPage() {
 
   const hasResults = Object.keys(results).length > 0;
 
-  const handleScan = async () => {
+  const handleScan = async (scanConfig = config) => {
     try {
       const res  = await fetch("/api/scan/validate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(config),
+        body:    JSON.stringify(scanConfig),
       });
       const data = await res.json();
       if (data.warnings && data.warnings.length > 0) {
         setWarnings(data.warnings);
-        setPendingConfig(config);
+        setPendingConfig(scanConfig);
       } else {
-        setConfig(config);
-        startScan(config);
+        setConfig(scanConfig);
+        startScan(scanConfig);
       }
     } catch {
-      startScan(config); // validation failed → proceed anyway
+      startScan(scanConfig); // validation failed → proceed anyway
     }
   };
 
@@ -100,8 +102,70 @@ export default function ScanPage() {
     startScan(pendingConfig);
   };
 
+  const handleWizardScanStart = (wizardRequest) => {
+    // Convert wizard data to scan config format
+    const wizardConfig = {
+      target: wizardRequest.targets[0], // First target for initial run
+      recon: wizardRequest.modules.recon || false,
+      ports: wizardRequest.modules.ports || false,
+      cve: wizardRequest.modules.cve || false,
+      web: wizardRequest.modules.web || false,
+      full_scan: wizardRequest.modules.full_scan || false,
+      port_range: "top-1000",
+      scan_type: "connect",
+      version_detect: true,
+      os_detect: true,
+      port_script: "",
+      port_timing: 4,
+      skip_ping: false,
+      port_extra_flags: "",
+      web_depth: 1,
+      recon_wordlist: "subdomains-top5000.txt",
+      scan_classification: wizardRequest.scanType || "active",
+    };
+    
+    // If multiple targets, use bulk API
+    if (wizardRequest.targets.length > 1) {
+      // Bulk scanning will be handled by the bulk API
+      handleBulkScan(wizardRequest.targets, wizardConfig);
+    } else {
+      setConfig(wizardConfig);
+      handleScan(wizardConfig);
+    }
+    
+    setShowWizard(false);
+  };
+
+  const handleBulkScan = async (targets, baseConfig) => {
+    try {
+      const res = await fetch("/api/scan/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targets,
+          config: baseConfig,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Bulk scan started - refresh or navigate to projects
+        window.location.href = "/projects";
+      }
+    } catch (error) {
+      console.error("Bulk scan failed:", error);
+      alert("Failed to start bulk scan. Please try again.");
+    }
+  };
+
   return (
     <>
+      {showWizard && (
+        <ScanWizard 
+          onScanStart={handleWizardScanStart} 
+          onCancel={() => setShowWizard(false)} 
+        />
+      )}
+
       {warnings && (
         <WarningsDialog
           warnings={warnings}
@@ -118,7 +182,25 @@ export default function ScanPage() {
             gap: "0.5rem",
             borderBottom: "2px solid var(--bg2)",
             paddingBottom: "0.5rem",
+            flexWrap: "wrap",
           }}>
+            <button
+              onClick={() => { setScanMode("wizard"); setShowWizard(true); }}
+              style={{
+                padding: "0.5rem 1rem",
+                background: "var(--accent)",
+                color: "var(--bg-primary)",
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                fontWeight: "600",
+                transition: "all 0.2s",
+              }}
+              title="Quick guided scan"
+            >
+              🧙 Smart Wizard
+            </button>
             <button
               onClick={() => setScanMode("form")}
               style={{
@@ -132,8 +214,9 @@ export default function ScanPage() {
                 fontWeight: scanMode === "form" ? "600" : "400",
                 transition: "all 0.2s",
               }}
+              title="Advanced form with all options"
             >
-              📋 Scan Form
+              📋 Advanced
             </button>
             <button
               onClick={() => setScanMode("json")}
@@ -148,8 +231,9 @@ export default function ScanPage() {
                 fontWeight: scanMode === "json" ? "600" : "400",
                 transition: "all 0.2s",
               }}
+              title="JSON-based instructions for automation"
             >
-              📝 Scan Instructions
+              📝 JSON API
             </button>
           </div>
 
