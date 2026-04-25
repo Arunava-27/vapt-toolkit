@@ -223,6 +223,13 @@ class PortScanner:
                         for sid, out in s.get("script", {}).items()
                     }
 
+                    # Parse confidence, handling empty strings from nmap
+                    conf_val = s.get("conf", 0)
+                    try:
+                        conf = int(conf_val) if conf_val else 0
+                    except (ValueError, TypeError):
+                        conf = 0
+                    
                     open_ports.append({
                         "port":      port,
                         "proto":     proto.upper(),
@@ -232,7 +239,7 @@ class PortScanner:
                         "version":   s.get("version", ""),
                         "extrainfo": s.get("extrainfo", ""),
                         "cpe":       s.get("cpe", ""),
-                        "conf":      int(s.get("conf", 0)),
+                        "conf":      conf,
                         "scripts":   scripts,
                     })
 

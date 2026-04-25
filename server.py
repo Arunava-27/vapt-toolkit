@@ -215,7 +215,7 @@ class ScanRequest(BaseModel):
     os_detect: bool = False
     port_script: str = ""            # "" | "default" | "banner" | "vuln" | "safe" | "http" | "ssl" | "smb" | "ftp" | "ssh" | "dns" | "smtp"
     port_timing: int = 4             # T0-T5
-    skip_ping: bool = False          # -Pn
+    skip_ping: bool = True          # -Pn (default True for better host detection)
     port_extra_flags: str = ""       # raw additional nmap flags
     web_depth: int = 1
     web_vulnerability_scan: bool = False  # Enable comprehensive web vulnerability scanning

@@ -86,7 +86,9 @@ class WebVulnerabilityScanner:
         """
         self.config = config
         self.scope_enforcer = ScopeEnforcer(
-            override_robots_txt=config.override_robots_txt
+            base_url=config.target_url,
+            authorized_targets=config.scope,
+            respect_robots_txt=not config.override_robots_txt
         )
         self.aggregator = VulnerabilityAggregator()
         self.scan_stats = {
