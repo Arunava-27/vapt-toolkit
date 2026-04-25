@@ -103,34 +103,33 @@ export default function ScanPage() {
   };
 
   const handleWizardScanStart = (wizardRequest) => {
-    // Convert wizard data to scan config format
-    const wizardConfig = {
-      target: wizardRequest.targets[0], // First target for initial run
-      recon: wizardRequest.modules.recon || false,
-      ports: wizardRequest.modules.ports || false,
-      cve: wizardRequest.modules.cve || false,
-      web: wizardRequest.modules.web || false,
-      full_scan: wizardRequest.modules.full_scan || false,
+    // Create a clean config object with no React references
+    const cleanConfig = {
+      target: String(wizardRequest.targets[0] || ""),
+      recon: Boolean(wizardRequest.modules.recon),
+      ports: Boolean(wizardRequest.modules.ports),
+      cve: Boolean(wizardRequest.modules.cve),
+      web: Boolean(wizardRequest.modules.web),
+      full_scan: Boolean(wizardRequest.modules.full_scan),
       port_range: "top-1000",
       scan_type: "connect",
       version_detect: true,
       os_detect: true,
       port_script: "",
       port_timing: 4,
-      skip_ping: false,
+      skip_ping: true, // Changed to true for faster scans
       port_extra_flags: "",
       web_depth: 1,
       recon_wordlist: "subdomains-top5000.txt",
-      scan_classification: wizardRequest.classification || "active",
+      scan_classification: String(wizardRequest.classification || "active"),
     };
     
     // If multiple targets, use bulk API
-    if (wizardRequest.targets.length > 1) {
-      // Bulk scanning will be handled by the bulk API
-      handleBulkScan(wizardRequest.targets, wizardConfig);
+    if (wizardRequest.targets && wizardRequest.targets.length > 1) {
+      handleBulkScan(wizardRequest.targets, cleanConfig);
     } else {
-      setConfig(wizardConfig);
-      handleScan(wizardConfig);
+      setConfig(cleanConfig);
+      handleScan(cleanConfig);
     }
     
     setShowWizard(false);
