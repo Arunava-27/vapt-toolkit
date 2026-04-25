@@ -810,17 +810,25 @@ async def _execute_scan(state: ScanState):
     try:
         push("start", target=req.target, scan_type=req.scan_classification)
         
-        # Trigger webhook for scan start
-        await webhook_manager.trigger_webhook(
-            WebhookEvent(
-                event_type="scan_started",
-                scan_id=state.scan_id,
-                data={
-                    "target": req.target,
-                    "scan_type": req.scan_classification,
-                }
+        # Trigger webhook for scan start (non-blocking)
+        try:
+            await asyncio.wait_for(
+                webhook_manager.trigger_webhook(
+                    WebhookEvent(
+                        event_type="scan_started",
+                        scan_id=state.scan_id,
+                        data={
+                            "target": req.target,
+                            "scan_type": req.scan_classification,
+                        }
+                    )
+                ),
+                timeout=5.0
             )
-        )
+        except asyncio.TimeoutError:
+            logger.warning(f"Webhook trigger timeout for scan {state.scan_id}")
+        except Exception as webhook_err:
+            logger.warning(f"Webhook trigger failed: {webhook_err}")
         
         # Validate target for active scans
         is_active = req.scan_classification == "active"
@@ -1055,56 +1063,78 @@ async def _execute_scan(state: ScanState):
             state.status = "done"
             
             # Trigger webhook events
-            await webhook_manager.trigger_webhook(
-                WebhookEvent(
-                    event_type="scan_completed",
-                    project_id=pid,
-                    scan_id=state.scan_id,
-                    data={
-                        "target": req.target,
-                        "scan_type": req.scan_classification,
-                        "results_summary": {
-                            "cves": results.get("cve", {}).get("total_cves", 0),
-                            "ports": len(results.get("ports", {}).get("open_ports", [])),
-                            "subdomains": len(results.get("recon", {}).get("subdomains", [])),
-                            "web_vulns": results.get("web_vulnerabilities", {}).get("total_findings", 0),
-                        }
-                    }
+            try:
+                await asyncio.wait_for(
+                    webhook_manager.trigger_webhook(
+                        WebhookEvent(
+                            event_type="scan_completed",
+                            project_id=pid,
+                            scan_id=state.scan_id,
+                            data={
+                                "target": req.target,
+                                "scan_type": req.scan_classification,
+                                "results_summary": {
+                                    "cves": results.get("cve", {}).get("total_cves", 0),
+                                    "ports": len(results.get("ports", {}).get("open_ports", [])),
+                                    "subdomains": len(results.get("recon", {}).get("subdomains", [])),
+                                    "web_vulns": results.get("web_vulnerabilities", {}).get("total_findings", 0),
+                                }
+                            }
+                        )
+                    ),
+                    timeout=5.0
                 )
-            )
+            except (asyncio.TimeoutError, Exception) as webhook_err:
+                logger.warning(f"Failed to trigger completion webhook: {webhook_err}")
 
     except asyncio.CancelledError:
         state.status = "stopped"
         push("stopped", message="Scan was cancelled.")
     except Exception as e:
+        logger.exception(f"Scan execution error for {req.target}: {e}")
         state.status = "error"
         push("error", message=str(e))
         
         # Trigger webhook for scan failure
-        await webhook_manager.trigger_webhook(
-            WebhookEvent(
-                event_type="scan_failed",
-                scan_id=state.scan_id,
-                project_id=state.project_id,
-                data={
-                    "target": req.target,
-                    "error": str(e),
-                    "scan_type": req.scan_classification,
-                }
+        try:
+            await webhook_manager.trigger_webhook(
+                WebhookEvent(
+                    event_type="scan_failed",
+                    scan_id=state.scan_id,
+                    project_id=state.project_id,
+                    data={
+                        "target": req.target,
+                        "error": str(e),
+                        "scan_type": req.scan_classification,
+                    }
+                )
             )
-        )
+        except Exception as webhook_err:
+            logger.warning(f"Failed to trigger webhook: {webhook_err}")
 
 
 # ── Scan endpoints ────────────────────────────────────────────────────────────
 
 @app.post("/api/scan")
 async def start_scan(req: ScanRequest):
-    _gc_scans()
-    scan_id = str(uuid.uuid4())
-    state = ScanState(scan_id=scan_id, target=req.target, config=req.dict())
-    ACTIVE_SCANS[scan_id] = state
-    state.task = asyncio.create_task(_execute_scan(state))
-    return {"scan_id": scan_id}
+    try:
+        _gc_scans()
+        scan_id = str(uuid.uuid4())
+        state = ScanState(scan_id=scan_id, target=req.target, config=req.dict())
+        ACTIVE_SCANS[scan_id] = state
+        try:
+            state.task = asyncio.create_task(_execute_scan(state))
+        except Exception as e:
+            logger.exception(f"Failed to create scan task: {e}")
+            state.status = "error"
+            state.events.append({"event": "error", "message": str(e)})
+            raise HTTPException(status_code=500, detail=str(e))
+        return {"scan_id": scan_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Scan endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/scan/{scan_id}/stream")
@@ -1190,11 +1220,15 @@ async def api_list_projects():
 
 @app.get("/api/dashboard")
 async def api_dashboard():
-    loop = asyncio.get_event_loop()
-    stats = await loop.run_in_executor(None, dashboard_stats)
-    active = sum(1 for s in ACTIVE_SCANS.values() if s.status == "running")
-    recent = await loop.run_in_executor(None, list_projects)
-    return {**stats, "active_scans": active, "recent_projects": recent[:5]}
+    try:
+        loop = asyncio.get_event_loop()
+        stats = await loop.run_in_executor(None, dashboard_stats)
+        active = sum(1 for s in ACTIVE_SCANS.values() if s.status == "running")
+        recent = await loop.run_in_executor(None, list_projects)
+        return {**stats, "active_scans": active, "recent_projects": recent[:5]}
+    except Exception as e:
+        logger.exception(f"Dashboard endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/projects/{pid}")
