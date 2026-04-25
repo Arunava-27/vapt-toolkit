@@ -103,25 +103,25 @@ export default function ScanPage() {
   };
 
   const handleWizardScanStart = (wizardRequest) => {
-    // Create a clean config object with no React references
+    // Create a clean config object with only the modules selected
     const cleanConfig = {
       target: String(wizardRequest.targets[0] || ""),
       recon: Boolean(wizardRequest.modules.recon),
       ports: Boolean(wizardRequest.modules.ports),
       cve: Boolean(wizardRequest.modules.cve),
       web: Boolean(wizardRequest.modules.web),
-      full_scan: Boolean(wizardRequest.modules.full_scan),
+      full_scan: false,
       port_range: "top-1000",
       scan_type: "connect",
       version_detect: true,
       os_detect: true,
       port_script: "",
       port_timing: 4,
-      skip_ping: true, // Changed to true for faster scans
+      skip_ping: true,
       port_extra_flags: "",
       web_depth: 1,
       recon_wordlist: "subdomains-top5000.txt",
-      scan_classification: String(wizardRequest.classification || "active"),
+      scan_classification: "active", // Just use active by default - let modules define behavior
     };
     
     // If multiple targets, use bulk API

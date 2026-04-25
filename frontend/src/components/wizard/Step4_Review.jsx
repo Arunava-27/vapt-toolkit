@@ -2,12 +2,11 @@ import "./Step4_Review.css";
 
 export default function Step4_Review({ wizardData, onLaunchScan }) {
   const goalNames = {
-    recon: "Quick Reconnaissance",
-    ports: "Find Open Services",
+    quick: "Reconnaissance Only",
+    ports: "Open Ports & Services",
     web: "Web Vulnerabilities",
-    full: "Full Assessment",
-    compliance: "Compliance Audit",
-    custom: "Custom Scan",
+    full: "Everything (Full Audit)",
+    custom: "Custom Modules",
   };
 
   const selectedModules = Object.entries(wizardData.modules)
@@ -29,29 +28,11 @@ export default function Step4_Review({ wizardData, onLaunchScan }) {
       </p>
 
       <div className="review-cards">
-        {/* Goal Summary */}
-        <div className="review-card">
-          <div className="card-icon">🎯</div>
-          <div className="card-content">
-            <h4>Scanning Goal</h4>
-            <p className="card-value">{goalNames[wizardData.goal]}</p>
-            <p className="card-description">
-              {wizardData.goal === "custom"
-                ? "Custom configuration"
-                : wizardData.classification === "passive"
-                ? "Non-intrusive scanning"
-                : wizardData.classification === "active"
-                ? "Intrusive scanning"
-                : "All modules enabled"}
-            </p>
-          </div>
-        </div>
-
         {/* Target Summary */}
         <div className="review-card">
           <div className="card-icon">🎯</div>
           <div className="card-content">
-            <h4>Targets</h4>
+            <h4>Target</h4>
             <p className="card-value">
               {wizardData.targets.length === 1
                 ? wizardData.targets[0]
@@ -59,11 +40,16 @@ export default function Step4_Review({ wizardData, onLaunchScan }) {
             </p>
             {wizardData.targets.length > 1 && (
               <div className="target-list-small">
-                {wizardData.targets.map((target, i) => (
+                {wizardData.targets.slice(0, 3).map((target, i) => (
                   <span key={i} className="target-badge">
                     {target}
                   </span>
                 ))}
+                {wizardData.targets.length > 3 && (
+                  <span className="target-badge">
+                    +{wizardData.targets.length - 3} more
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -73,7 +59,7 @@ export default function Step4_Review({ wizardData, onLaunchScan }) {
         <div className="review-card">
           <div className="card-icon">📦</div>
           <div className="card-content">
-            <h4>Modules</h4>
+            <h4>Modules to Run</h4>
             <p className="card-value">{selectedModules.length} enabled</p>
             <div className="modules-badges">
               {selectedModules.map((mod) => (
@@ -85,21 +71,28 @@ export default function Step4_Review({ wizardData, onLaunchScan }) {
           </div>
         </div>
 
-        {/* Risk & Time */}
+        {/* Time & Risk */}
         <div className="review-card">
           <div className="card-icon">⏱</div>
           <div className="card-content">
-            <h4>Risk & Duration</h4>
-            <p className="risk-assessment">
+            <h4>Estimated Duration</h4>
+            <p className="card-value">{wizardData.estimatedTime}</p>
+            <p className="card-description">
+              Risk Level:{" "}
               <span
-                className="risk-indicator"
-                style={{ backgroundColor: riskColors[wizardData.riskLevel] }}
+                style={{
+                  backgroundColor:
+                    riskColors[wizardData.riskLevel] || "#6b7280",
+                  color: "white",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  textTransform: "capitalize",
+                }}
               >
                 {wizardData.riskLevel}
               </span>
-            </p>
-            <p className="card-description">
-              Estimated time: {wizardData.estimatedTime}
             </p>
           </div>
         </div>
@@ -107,27 +100,28 @@ export default function Step4_Review({ wizardData, onLaunchScan }) {
 
       {/* Important Notes */}
       <div className="review-notes">
-        <h4>⚠️ Important Notes</h4>
+        <h4>⚠️ Scan Information</h4>
         <ul>
-          {wizardData.classification === "active" && (
+          {selectedModules.includes("ports") && (
             <li>
-              This is an <strong>active scan</strong> - it may trigger alerts on
-              the target system
+              <strong>Port scanning enabled</strong> - may trigger alerts on
+              security systems
             </li>
           )}
-          {wizardData.classification === "hybrid" && (
+          {selectedModules.includes("web") && (
             <li>
-              This is a <strong>hybrid scan</strong> - comprehensive and quite intrusive
+              <strong>Web testing enabled</strong> - will send HTTP requests to
+              the target
             </li>
           )}
           {wizardData.targets.length > 1 && (
             <li>
-              Scanning <strong>{wizardData.targets.length} targets</strong> - total
-              time will be multiplied
+              Scanning <strong>{wizardData.targets.length} targets</strong> -
+              total time will multiply
             </li>
           )}
           <li>
-            Make sure you have <strong>permission</strong> to scan these targets
+            Make sure you have <strong>permission</strong> to scan this target
           </li>
         </ul>
       </div>
@@ -138,7 +132,7 @@ export default function Step4_Review({ wizardData, onLaunchScan }) {
           🚀 Start Scan
         </button>
         <p className="action-hint">
-          You'll be able to monitor progress in real-time
+          You'll see results in real-time as modules complete
         </p>
       </div>
     </div>

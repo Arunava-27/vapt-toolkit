@@ -9,27 +9,21 @@ const MODULE_INFO = {
   },
   ports: {
     name: "Port Scanning",
-    description: "Nmap port scan, service detection, banner grabbing",
+    description: "Nmap scan, service detection, banner grabbing",
     risk: "medium",
-    time: "30s - 1m",
+    time: "30s - 2m",
   },
   web: {
     name: "Web Vulnerabilities",
-    description: "XSS, SQLi, CSRF, auth flaws, exposed endpoints",
+    description: "XSS, SQLi, CSRF, auth flaws, path traversal",
     risk: "high",
     time: "1-3m",
   },
   cve: {
-    name: "CVE Detection",
-    description: "Known vulnerabilities, version detection, exploit lookup",
+    name: "CVE Lookup",
+    description: "Known CVEs for detected services/versions",
     risk: "low",
     time: "30s",
-  },
-  full_scan: {
-    name: "Full Deep Scan",
-    description: "All modules with aggressive settings",
-    risk: "very-high",
-    time: "5-10m",
   },
 };
 
@@ -43,17 +37,12 @@ export default function Step3_Modules({ wizardData, updateData }) {
   };
 
   const selectedCount = Object.values(wizardData.modules).filter(Boolean).length;
-  const isCustom = wizardData.goal === "custom";
 
   return (
     <div className="step-modules">
-      <h3>
-        {isCustom ? "Select Modules" : "Recommended Modules"}
-      </h3>
+      <h3>Customize Modules (Optional)</h3>
       <p className="step-subtitle">
-        {isCustom
-          ? "Choose exactly which scanning modules to enable"
-          : "These modules are recommended for your selected goal. You can customize if needed."}
+        Adjust the modules that will run. You can enable/disable each independently.
       </p>
 
       <div className="modules-grid">
@@ -104,11 +93,10 @@ export default function Step3_Modules({ wizardData, updateData }) {
 
 function calculateTotalTime(modules) {
   const times = {
-    recon: 0.33, // 20s
-    ports: 0.75, // 30s-1m
-    web: 2, // 1-3m
-    cve: 0.5, // 30s
-    full_scan: 7.5, // 5-10m
+    recon: 0.33,
+    ports: 1,
+    web: 2,
+    cve: 0.5,
   };
   return Object.entries(modules)
     .filter(([, enabled]) => enabled)
