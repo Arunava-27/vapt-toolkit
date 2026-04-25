@@ -7,6 +7,7 @@ and integrates with the VAPT toolkit's scanning infrastructure.
 
 import time
 import logging
+import asyncio
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
@@ -178,14 +179,15 @@ class WebVulnerabilityScanner:
         logger.info("Phase 1: Surface Mapping & Endpoint Discovery")
         
         try:
-            mapper = SurfaceMapper(timeout=self.config.request_timeout, 
-                                  verify_ssl=self.config.verify_ssl)
-            
-            results = mapper.crawl_and_map(
+            mapper = SurfaceMapper(
                 base_url=self.config.target_url,
-                scope_enforcer=self.scope_enforcer,
-                max_pages=self.config.max_pages_to_crawl
+                max_depth=2,
+                max_pages=self.config.max_pages_to_crawl,
+                timeout=int(self.config.request_timeout)
             )
+            
+            # Run async method from sync context
+            results = asyncio.run(mapper.run())
             
             self.discovered_endpoints = results.get("endpoints", [])
             self.scan_stats["endpoints_tested"] = len(self.discovered_endpoints)
@@ -202,7 +204,7 @@ class WebVulnerabilityScanner:
         
         try:
             tester = InjectionTester(timeout=self.config.request_timeout,
-                                    verify_ssl=self.config.verify_ssl)
+                                    rate_limit=self.config.rate_limit_delay)
             
             findings = []
             

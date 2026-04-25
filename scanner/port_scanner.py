@@ -148,12 +148,21 @@ class PortScanner:
                 "error": f"Nmap not found. Install with: apt install nmap (WSL) or choco install nmap (Windows)"
             }
         
-        # Create nmap scanner with WSL nmap path if needed
+        # Create nmap scanner
+        # NOTE: Don't pass WSL paths to PortScanner - python-nmap runs on Windows
+        # and can't execute /usr/bin/nmap directly. Let PortScanner find Windows nmap.
         try:
-            nm = nmap.PortScanner(nmap_search_path=[wsl.nmap_path] if wsl.nmap_path else None)
-        except Exception:
-            # Fallback to default nmap discovery
             nm = nmap.PortScanner()
+        except Exception as e:
+            return {
+                "target": self.target,
+                "host_info": {},
+                "os_info": {},
+                "open_ports": [],
+                "traceroute": [],
+                "scan_args": "",
+                "error": f"Nmap initialization failed: {str(e)}"
+            }
         
         self._nm = nm
         args, ports_arg = self._build_args()
