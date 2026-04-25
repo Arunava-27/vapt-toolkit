@@ -1214,17 +1214,53 @@ async def list_active_scans():
 
 @app.get("/api/projects")
 async def api_list_projects():
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, list_projects)
+    try:
+        loop = asyncio.get_event_loop()
+        logger.info("Projects: Starting to fetch list...")
+        projects = await asyncio.wait_for(
+            loop.run_in_executor(None, list_projects),
+            timeout=5.0
+        )
+        logger.info(f"Projects: Returning {len(projects)} projects")
+        return projects
+    except asyncio.TimeoutError:
+        logger.warning("Projects: list_projects() timed out after 5s")
+        raise HTTPException(status_code=503, detail="Database query timeout. Please try again.")
+    except Exception as e:
+        logger.exception(f"Projects endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/dashboard")
 async def api_dashboard():
     try:
         loop = asyncio.get_event_loop()
-        stats = await loop.run_in_executor(None, dashboard_stats)
+        logger.info("Dashboard: Starting to fetch stats...")
+        
+        # Fetch dashboard stats with timeout
+        try:
+            stats = await asyncio.wait_for(
+                loop.run_in_executor(None, dashboard_stats),
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Dashboard: dashboard_stats() timed out after 5s")
+            stats = {"projects": 0, "ports": 0, "cves": 0, "subdomains": 0, "web": 0}
+        
+        # Get active scans count
         active = sum(1 for s in ACTIVE_SCANS.values() if s.status == "running")
-        recent = await loop.run_in_executor(None, list_projects)
+        
+        # Fetch recent projects with timeout
+        try:
+            recent = await asyncio.wait_for(
+                loop.run_in_executor(None, list_projects),
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Dashboard: list_projects() timed out after 5s")
+            recent = []
+        
+        logger.info(f"Dashboard: Returning stats with {len(recent)} recent projects")
         return {**stats, "active_scans": active, "recent_projects": recent[:5]}
     except Exception as e:
         logger.exception(f"Dashboard endpoint error: {e}")
