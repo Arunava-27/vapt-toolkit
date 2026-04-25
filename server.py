@@ -686,6 +686,7 @@ async def start_scan_from_json(req: JSONScanRequest) -> JSONScanResponse:
         "web_test_rate_limiting": "all" in instruction.modules,
         "scope": instruction.scope,
         "override_robots_txt": instruction.advanced_config.skip_robots_txt,
+        "skip_ping": True,
         "project_name": req.project_name or instruction.name,
         "notification_config": {
             "severity_filter": instruction.notifications.severity_filter,

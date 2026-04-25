@@ -97,8 +97,8 @@ def validate_scope(
         except ValueError:
             pass
     
-    # If no scope list, basic validation only
-    if scope is None:
+    # If no scope list or empty scope, basic validation only (allow any valid target)
+    if scope is None or not scope:
         return True
     
     # Check against scope list
