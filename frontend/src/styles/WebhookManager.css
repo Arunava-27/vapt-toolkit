@@ -1,0 +1,535 @@
+/* WebhookManager Component Styles */
+
+.webhook-manager {
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.webhook-manager h2 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 24px;
+}
+
+.webhook-manager h3 {
+  color: #555;
+  margin-top: 20px;
+  margin-bottom: 15px;
+}
+
+.webhook-manager h4 {
+  color: #666;
+  margin: 10px 0;
+  font-size: 16px;
+}
+
+.webhook-manager h5 {
+  color: #777;
+  margin: 15px 0 10px 0;
+  font-size: 14px;
+}
+
+.webhook-manager h6 {
+  color: #888;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+/* Alert Messages */
+.alert {
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  animation: slideDown 0.3s ease;
+}
+
+.alert-error {
+  background-color: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+.alert-success {
+  background-color: #efe;
+  color: #3c3;
+  border: 1px solid #cfc;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.webhook-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #ddd;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #0056cc;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #1e7e34;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #bb2d3b;
+}
+
+.btn-warning {
+  background-color: #ffc107;
+  color: #333;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background-color: #e0a800;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #545b62;
+}
+
+.btn-outline-danger {
+  background-color: transparent;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+}
+
+.btn-outline-danger:hover:not(:disabled) {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Form */
+.webhook-form {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border-left: 4px solid #007bff;
+}
+
+.webhook-form h3 {
+  margin-top: 0;
+  color: #007bff;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+}
+
+.form-group input[type="url"],
+.form-group input[type="password"],
+.form-group input[type="text"],
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-group input[type="url"]:focus,
+.form-group input[type="password"]:focus,
+.form-group input[type="text"]:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.form-group small {
+  display: block;
+  margin-top: 6px;
+  color: #666;
+  font-size: 12px;
+}
+
+/* Event Checkboxes */
+.event-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+}
+
+.checkbox-label:hover {
+  background-color: #f0f0f0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Webhooks List */
+.webhooks-list {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.webhooks {
+  display: grid;
+  gap: 16px;
+}
+
+.webhook-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.webhook-card:hover {
+  border-color: #007bff;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.1);
+}
+
+.webhook-header-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.webhook-details {
+  flex: 1;
+}
+
+.webhook-details h4 {
+  word-break: break-all;
+  margin: 0 0 8px 0;
+}
+
+.webhook-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: #666;
+}
+
+.webhook-meta .status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: #e8e8e8;
+  color: #333;
+}
+
+.webhook-meta .status.enabled {
+  background: #d4edda;
+  color: #155724;
+}
+
+.webhook-meta .status.disabled {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Events */
+.webhook-events {
+  margin-bottom: 12px;
+}
+
+.webhook-events strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.event-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-info {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+/* Actions */
+.webhook-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+/* Logs */
+.webhook-logs {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid #eee;
+}
+
+.logs-table {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.logs-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.logs-table th {
+  background-color: #f8f9fa;
+  padding: 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #ddd;
+}
+
+.logs-table td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.logs-table tr:hover {
+  background-color: #f9f9f9;
+}
+
+.logs-table td.response {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logs-table td.status {
+  font-weight: 600;
+}
+
+.logs-table td.status.success {
+  color: #28a745;
+}
+
+.logs-table td.status.error {
+  color: #dc3545;
+}
+
+/* Stats */
+.logs-stats {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.logs-stats h6 {
+  margin-top: 0;
+  color: #333;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.stat .label {
+  color: #666;
+  font-size: 12px;
+}
+
+.stat .value {
+  font-weight: 700;
+  font-size: 18px;
+  color: #333;
+}
+
+.stat .value.success {
+  color: #28a745;
+}
+
+.stat .value.error {
+  color: #dc3545;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .webhook-manager {
+    padding: 15px;
+  }
+
+  .webhook-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .webhook-header .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .webhook-form {
+    padding: 15px;
+  }
+
+  .event-checkboxes {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+
+  .webhook-actions {
+    flex-direction: column;
+  }
+
+  .webhook-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .webhook-meta {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .logs-table table {
+    font-size: 12px;
+  }
+
+  .logs-table th,
+  .logs-table td {
+    padding: 8px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .webhook-manager {
+    padding: 10px;
+  }
+
+  .webhook-manager h2 {
+    font-size: 20px;
+  }
+
+  .event-badges {
+    gap: 4px;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}

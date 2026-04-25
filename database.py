@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from contextlib import contextmanager
+from typing import Optional
 
 DB_PATH = Path(__file__).parent / "vapt.db"
 
@@ -116,6 +117,87 @@ def init_db():
                 created_at  TEXT NOT NULL,
                 updated_at  TEXT,
                 FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+        """)
+
+        # Create fp_patterns table for false positive pattern database
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS fp_patterns (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT,
+                pattern_type    TEXT NOT NULL,
+                description     TEXT NOT NULL,
+                regex_pattern   TEXT NOT NULL,
+                severity_impact REAL NOT NULL DEFAULT 0.6,
+                enabled         BOOLEAN DEFAULT 1,
+                keywords        TEXT,
+                safe_framework  TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+        """)
+        
+        # Create webhooks table if not exists
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT NOT NULL,
+                url             TEXT NOT NULL,
+                events          TEXT NOT NULL,
+                secret_hash     TEXT NOT NULL,
+                enabled         BOOLEAN DEFAULT 1,
+                created_at      TEXT NOT NULL,
+                last_triggered  TEXT,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+        """)
+        
+        # Create webhook_logs table if not exists
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS webhook_logs (
+                id          TEXT PRIMARY KEY,
+                webhook_id  TEXT NOT NULL,
+                event       TEXT NOT NULL,
+                payload     TEXT NOT NULL,
+                status      TEXT,
+                response    TEXT,
+                attempts    INTEGER DEFAULT 1,
+                created_at  TEXT NOT NULL,
+                FOREIGN KEY(webhook_id) REFERENCES webhooks(id)
+            )
+        """)
+        
+        # Create bulk_jobs table for parallel scanning
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS bulk_jobs (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT NOT NULL,
+                status          TEXT DEFAULT 'pending',
+                progress        INTEGER DEFAULT 0,
+                total_targets   INTEGER NOT NULL,
+                completed_count INTEGER DEFAULT 0,
+                failed_count    INTEGER DEFAULT 0,
+                created_at      TEXT NOT NULL,
+                started_at      TEXT,
+                completed_at    TEXT,
+                config          TEXT,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+        """)
+        
+        # Create bulk_job_targets table for individual target status
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS bulk_job_targets (
+                id          TEXT PRIMARY KEY,
+                job_id      TEXT NOT NULL,
+                target_url  TEXT NOT NULL,
+                status      TEXT DEFAULT 'pending',
+                result      TEXT,
+                error       TEXT,
+                started_at  TEXT,
+                completed_at TEXT,
+                FOREIGN KEY(job_id) REFERENCES bulk_jobs(id)
             )
         """)
 
@@ -334,3 +416,225 @@ def delete_schedule(schedule_id: str):
     """Delete a schedule."""
     with _conn() as c:
         c.execute("DELETE FROM schedules WHERE id=?", (schedule_id,))
+
+
+# ── Bulk Job Management ───────────────────────────────────────────────────
+
+def create_bulk_job(project_id: str, targets: list, config: dict) -> str:
+    """Create a new bulk scanning job."""
+    job_id = str(uuid.uuid4())
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO bulk_jobs (id, project_id, status, total_targets, config, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (job_id, project_id, "pending", len(targets), json.dumps(config, default=str),
+             datetime.now().isoformat())
+        )
+        
+        # Add individual targets
+        for target in targets:
+            target_id = str(uuid.uuid4())
+            c.execute(
+                """INSERT INTO bulk_job_targets (id, job_id, target_url, status)
+                   VALUES (?, ?, ?, ?)""",
+                (target_id, job_id, target, "pending")
+            )
+    
+    return job_id
+
+
+def get_bulk_job(job_id: str) -> dict | None:
+    """Get bulk job details."""
+    with _conn() as c:
+        row = c.execute(
+            """SELECT id, project_id, status, progress, total_targets, completed_count, failed_count,
+                      created_at, started_at, completed_at, config
+               FROM bulk_jobs WHERE id=?""",
+            (job_id,)
+        ).fetchone()
+    
+    if not row:
+        return None
+    
+    return dict(row)
+
+
+def get_bulk_job_targets(job_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
+    """Get targets for a bulk job."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT id, job_id, target_url, status, result, error, started_at, completed_at
+               FROM bulk_job_targets WHERE job_id=?
+               ORDER BY created_at LIMIT ? OFFSET ?""",
+            (job_id, limit, offset)
+        ).fetchall()
+    
+    return [dict(row) for row in rows]
+
+
+def update_bulk_job_status(job_id: str, status: str, progress: int = None):
+    """Update bulk job status."""
+    with _conn() as c:
+        if progress is not None:
+            c.execute(
+                "UPDATE bulk_jobs SET status=?, progress=? WHERE id=?",
+                (status, progress, job_id)
+            )
+        else:
+            c.execute(
+                "UPDATE bulk_jobs SET status=? WHERE id=?",
+                (status, job_id)
+            )
+
+
+def update_bulk_job_timing(job_id: str, started_at: str = None, completed_at: str = None):
+    """Update job timing fields."""
+    with _conn() as c:
+        if started_at:
+            c.execute("UPDATE bulk_jobs SET started_at=? WHERE id=?", (started_at, job_id))
+        if completed_at:
+            c.execute("UPDATE bulk_jobs SET completed_at=? WHERE id=?", (completed_at, job_id))
+
+
+def update_bulk_job_counters(job_id: str, completed: int = 0, failed: int = 0):
+    """Increment bulk job counters."""
+    with _conn() as c:
+        current = c.execute(
+            "SELECT completed_count, failed_count FROM bulk_jobs WHERE id=?",
+            (job_id,)
+        ).fetchone()
+        
+        if current:
+            new_completed = current[0] + completed
+            new_failed = current[1] + failed
+            total = c.execute(
+                "SELECT total_targets FROM bulk_jobs WHERE id=?",
+                (job_id,)
+            ).fetchone()[0]
+            
+            progress = int((new_completed / total) * 100) if total > 0 else 0
+            
+            c.execute(
+                "UPDATE bulk_jobs SET completed_count=?, failed_count=?, progress=? WHERE id=?",
+                (new_completed, new_failed, progress, job_id)
+            )
+
+
+def update_target_status(target_id: str, status: str, result: str = None, error: str = None,
+                        started_at: str = None, completed_at: str = None):
+    """Update individual target status in a bulk job."""
+    with _conn() as c:
+        c.execute(
+            """UPDATE bulk_job_targets 
+               SET status=?, result=?, error=?, started_at=?, completed_at=?
+               WHERE id=?""",
+            (status, result, error, started_at, completed_at, target_id)
+        )
+
+
+def list_bulk_jobs(project_id: str = None, limit: int = 50) -> list[dict]:
+    """List bulk jobs, optionally filtered by project."""
+    with _conn() as c:
+        if project_id:
+            rows = c.execute(
+                """SELECT id, project_id, status, progress, total_targets, completed_count, failed_count,
+                          created_at, started_at, completed_at
+                   FROM bulk_jobs WHERE project_id=?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (project_id, limit)
+            ).fetchall()
+        else:
+            rows = c.execute(
+                """SELECT id, project_id, status, progress, total_targets, completed_count, failed_count,
+                          created_at, started_at, completed_at
+                   FROM bulk_jobs
+                   ORDER BY created_at DESC LIMIT ?""",
+                (limit,)
+            ).fetchall()
+    
+    return [dict(row) for row in rows]
+
+
+def cancel_bulk_job(job_id: str):
+    """Cancel a bulk job."""
+    with _conn() as c:
+        c.execute(
+            "UPDATE bulk_jobs SET status=? WHERE id=?",
+            ("cancelled", job_id)
+        )
+
+
+# ── False Positive Pattern Management ──────────────────────────────────────
+
+def save_fp_pattern(pattern_dict: dict, project_id: Optional[str] = None) -> str:
+    """Save a custom false positive pattern"""
+    import uuid
+    pattern_id = pattern_dict.get("id", f"fp_{uuid.uuid4().hex[:8]}")
+    
+    with _conn() as c:
+        c.execute(
+            """INSERT OR REPLACE INTO fp_patterns 
+               (id, project_id, pattern_type, description, regex_pattern, severity_impact, enabled, keywords, safe_framework, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                pattern_id,
+                project_id,
+                pattern_dict["pattern_type"],
+                pattern_dict["description"],
+                pattern_dict["regex_pattern"],
+                float(pattern_dict.get("severity_impact", 0.6)),
+                pattern_dict.get("enabled", True),
+                json.dumps(pattern_dict.get("keywords", [])),
+                pattern_dict.get("safe_framework"),
+                datetime.now().isoformat(),
+                datetime.now().isoformat(),
+            )
+        )
+    return pattern_id
+
+
+def get_fp_patterns(project_id: Optional[str] = None, enabled_only: bool = True) -> list[dict]:
+    """Get false positive patterns, optionally for specific project"""
+    with _conn() as c:
+        query = "SELECT * FROM fp_patterns WHERE (project_id IS NULL OR project_id = ?)"
+        params = [project_id]
+        
+        if enabled_only:
+            query += " AND enabled = 1"
+        
+        query += " ORDER BY pattern_type, created_at DESC"
+        
+        rows = c.execute(query, params).fetchall()
+    
+    result = []
+    for r in rows:
+        result.append({
+            "id": r["id"],
+            "project_id": r["project_id"],
+            "pattern_type": r["pattern_type"],
+            "description": r["description"],
+            "regex_pattern": r["regex_pattern"],
+            "severity_impact": r["severity_impact"],
+            "enabled": bool(r["enabled"]),
+            "keywords": json.loads(r["keywords"] or "[]"),
+            "safe_framework": r["safe_framework"],
+            "created_at": r["created_at"],
+        })
+    return result
+
+
+def update_fp_pattern_status(pattern_id: str, enabled: bool) -> bool:
+    """Enable or disable a pattern"""
+    with _conn() as c:
+        c.execute(
+            "UPDATE fp_patterns SET enabled = ?, updated_at = ? WHERE id = ?",
+            (enabled, datetime.now().isoformat(), pattern_id)
+        )
+        return c.total_changes > 0
+
+
+def delete_fp_pattern(pattern_id: str) -> bool:
+    """Delete a custom false positive pattern"""
+    with _conn() as c:
+        c.execute("DELETE FROM fp_patterns WHERE id = ?", (pattern_id,))
+        return c.total_changes > 0

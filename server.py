@@ -4,6 +4,7 @@
 import asyncio
 import json
 import uuid
+import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -29,18 +30,86 @@ from scanner.scope import validate_scope, normalize_target, get_scope_summary
 from scanner.scan_logger import ScanLogger
 from scanner.web.web_scanner_orchestrator import WebVulnerabilityScanner, WebScanConfiguration
 from scanner.web.scan_comparison import ScanComparator
+from scanner.web.bulk_scanner import BulkScanner
 from scanner.api_auth import validate_api_key, check_rate_limit, generate_api_key, list_api_keys, revoke_api_key, get_rate_limit_info
 from scanner.notifications import get_notification_manager
+from scanner.webhooks import get_webhook_manager, WebhookEvent
 from scanner.reporters.executive_reporter import ExecutiveReporter
 from scanner.reporters.pdf_executive import ExecutivePDFGenerator
-from database import init_db, save_project, list_projects, get_project, rename_project, delete_project, dashboard_stats
+from database import (init_db, save_project, list_projects, get_project, rename_project, delete_project, dashboard_stats,
+                     create_bulk_job, get_bulk_job, get_bulk_job_targets, update_bulk_job_status, update_bulk_job_timing,
+                     update_bulk_job_counters, update_target_status, list_bulk_jobs, cancel_bulk_job,
+                     get_schedule, update_schedule, delete_schedule, create_schedule, list_schedules,
+                     save_fp_pattern, get_fp_patterns, update_fp_pattern_status, delete_fp_pattern)
+from scanner.web.fp_pattern_database import FalsePositivePatternDB
 from reporter.pdf_reporter import generate_pdf
 from wsl_config import wsl
+
+
+# ── False Positive Pattern Database ──────────────────────────────────────────
+
+fp_pattern_db = FalsePositivePatternDB()
+
+
+# ── Logger ────────────────────────────────────────────────────────────────────
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 # ── Notification Manager ─────────────────────────────────────────────────────
 
 notification_manager = get_notification_manager()
+
+# ── Webhook Manager ───────────────────────────────────────────────────────────
+
+webhook_manager = get_webhook_manager()
+
+# ── Bulk Scanner ──────────────────────────────────────────────────────────────
+
+async def _execute_scan_for_bulk(target: str, modules: dict, job_id: str = None):
+    """Execute a scan for a bulk job."""
+    config = {
+        "target": target,
+        "recon": modules.get("recon", False),
+        "ports": modules.get("ports", False),
+        "web": modules.get("web", False),
+        "cve": modules.get("cve", False),
+        "full_scan": modules.get("full_scan", False),
+        "scan_classification": modules.get("scan_classification", "active"),
+        "port_range": modules.get("port_range", "top-1000"),
+    }
+    
+    # Create a scan state for this target
+    scan_id = str(uuid.uuid4())
+    state = ScanState(
+        scan_id=scan_id,
+        target=target,
+        config=config,
+        project_id=modules.get("project_id"),
+        project_name=modules.get("project_name")
+    )
+    
+    ACTIVE_SCANS[scan_id] = state
+    
+    try:
+        await _execute_scan(state)
+        result = {
+            "scan_id": scan_id,
+            "status": state.status,
+            "events": state.events,
+            "results": {}
+        }
+        return result
+    finally:
+        # Clean up old scan
+        _gc_scans()
+
+
+bulk_scanner = BulkScanner(
+    max_parallel=10,
+    scan_callback=_execute_scan_for_bulk
+)
 
 # ── Background scan registry ──────────────────────────────────────────────────
 
@@ -178,12 +247,42 @@ class ScheduleRequest(BaseModel):
     time: str  # HH:MM format
 
 
+class BulkScanRequest(BaseModel):
+    targets: list[str]
+    modules: dict
+    max_parallel: int = 5
+    project_id: Optional[str] = None
+
+
 class CreateApiKeyResponse(BaseModel):
     api_key: str
     key_id: str
     project_id: str
     created_at: str
     warning: str = "Store this key securely. You won't be able to see it again!"
+
+
+# ── Webhook Models ────────────────────────────────────────────────────────────
+
+class WebhookRegisterRequest(BaseModel):
+    url: str
+    events: list[str]  # e.g., ["scan_completed", "finding_discovered"]
+    secret: str  # Secret for signing webhooks
+
+
+class WebhookResponse(BaseModel):
+    id: str
+    project_id: str
+    url: str
+    events: list[str]
+    enabled: bool
+    created_at: str
+    last_triggered: Optional[str] = None
+
+
+class WebhookTestRequest(BaseModel):
+    webhook_id: str
+    event_type: str = "test_event"
 
 
 async def get_api_key(authorization: str = Header(None)) -> str:
@@ -375,6 +474,18 @@ async def _execute_scan(state: ScanState):
 
     try:
         push("start", target=req.target, scan_type=req.scan_classification)
+        
+        # Trigger webhook for scan start
+        await webhook_manager.trigger_webhook(
+            WebhookEvent(
+                event_type="scan_started",
+                scan_id=state.scan_id,
+                data={
+                    "target": req.target,
+                    "scan_type": req.scan_classification,
+                }
+            )
+        )
         
         # Validate target for active scans
         is_active = req.scan_classification == "active"
@@ -589,6 +700,25 @@ async def _execute_scan(state: ScanState):
             state.project_name = name
             push("done", project_id=pid, project_name=name, scan_type=req.scan_classification)
             state.status = "done"
+            
+            # Trigger webhook events
+            await webhook_manager.trigger_webhook(
+                WebhookEvent(
+                    event_type="scan_completed",
+                    project_id=pid,
+                    scan_id=state.scan_id,
+                    data={
+                        "target": req.target,
+                        "scan_type": req.scan_classification,
+                        "results_summary": {
+                            "cves": results.get("cve", {}).get("total_cves", 0),
+                            "ports": len(results.get("ports", {}).get("open_ports", [])),
+                            "subdomains": len(results.get("recon", {}).get("subdomains", [])),
+                            "web_vulns": results.get("web_vulnerabilities", {}).get("total_findings", 0),
+                        }
+                    }
+                )
+            )
 
     except asyncio.CancelledError:
         state.status = "stopped"
@@ -596,6 +726,20 @@ async def _execute_scan(state: ScanState):
     except Exception as e:
         state.status = "error"
         push("error", message=str(e))
+        
+        # Trigger webhook for scan failure
+        await webhook_manager.trigger_webhook(
+            WebhookEvent(
+                event_type="scan_failed",
+                scan_id=state.scan_id,
+                project_id=state.project_id,
+                data={
+                    "target": req.target,
+                    "error": str(e),
+                    "scan_type": req.scan_classification,
+                }
+            )
+        )
 
 
 # ── Scan endpoints ────────────────────────────────────────────────────────────
@@ -1519,6 +1663,537 @@ async def run_schedule_now(schedule_id: str):
         return {"ok": True, "message": "Scan queued"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Bulk Scanning API ─────────────────────────────────────────────────────────
+
+@app.post("/api/bulk/scan")
+async def create_bulk_scan(req: BulkScanRequest):
+    """
+    Create and start a bulk scanning job.
+    
+    Request body:
+    {
+        "targets": ["example.com", "test.com"],
+        "modules": {"recon": true, "ports": true, "web": true},
+        "max_parallel": 5,
+        "project_id": "optional-project-id"
+    }
+    
+    Returns:
+    {
+        "job_id": "uuid",
+        "status": "running",
+        "estimated_time_seconds": 300,
+        "targets_count": 2,
+        "max_parallel": 5
+    }
+    """
+    if not req.targets:
+        raise HTTPException(status_code=400, detail="No targets provided")
+    
+    if len(req.targets) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 targets per job")
+    
+    if req.max_parallel < 1 or req.max_parallel > 20:
+        raise HTTPException(status_code=400, detail="max_parallel must be between 1-20")
+    
+    try:
+        # Create job in database
+        job_id = create_bulk_job(
+            project_id=req.project_id or str(uuid.uuid4()),
+            targets=req.targets,
+            config=req.modules.copy()
+        )
+        
+        # Register with bulk scanner
+        bulk_scanner.create_job(job_id, req.targets, req.modules)
+        bulk_scanner.max_parallel = req.max_parallel
+        
+        # Start scanning asynchronously
+        asyncio.create_task(_run_bulk_job(job_id))
+        
+        # Get initial status
+        status = await bulk_scanner.start_scanning(job_id)
+        
+        return {
+            "job_id": job_id,
+            **status,
+            "targets_count": len(req.targets)
+        }
+    
+    except Exception as e:
+        logger.error(f"Error creating bulk scan: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/bulk/jobs")
+async def list_bulk_jobs_endpoint(project_id: str = None, limit: int = 50):
+    """List all bulk scanning jobs."""
+    jobs = list_bulk_jobs(project_id, limit)
+    return {"jobs": jobs, "count": len(jobs)}
+
+
+@app.get("/api/bulk/jobs/{job_id}")
+async def get_bulk_job_status(job_id: str):
+    """Get status of a bulk scanning job."""
+    job = get_bulk_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    status = bulk_scanner.get_job_status(job_id)
+    
+    return {
+        "job_id": job_id,
+        "status": job.get("status"),
+        "progress": job.get("progress"),
+        "completed": job.get("completed_count"),
+        "failed": job.get("failed_count"),
+        "total": job.get("total_targets"),
+        "created_at": job.get("created_at"),
+        "started_at": job.get("started_at"),
+        "completed_at": job.get("completed_at"),
+        "queue_size": bulk_scanner.get_queue_size(job_id),
+        "running_count": bulk_scanner.get_running_count(job_id)
+    }
+
+
+@app.get("/api/bulk/jobs/{job_id}/targets")
+async def get_bulk_job_targets_endpoint(job_id: str, limit: int = 50, offset: int = 0):
+    """Get targets and their status for a bulk job."""
+    job = get_bulk_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    targets = get_bulk_job_targets(job_id, limit, offset)
+    
+    return {
+        "job_id": job_id,
+        "targets": targets,
+        "total": job.get("total_targets"),
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@app.get("/api/bulk/jobs/{job_id}/results")
+async def get_bulk_job_results(job_id: str):
+    """Get aggregated results from a bulk scanning job."""
+    job = get_bulk_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.get("status") not in ("completed", "cancelled"):
+        raise HTTPException(status_code=400, detail="Job is still running or failed")
+    
+    results = bulk_scanner.get_job_results(job_id)
+    
+    return {
+        "job_id": job_id,
+        "status": job.get("status"),
+        "created_at": job.get("created_at"),
+        "completed_at": job.get("completed_at"),
+        "summary": {
+            "total": results.get("status", {}).get("total"),
+            "completed": results.get("status", {}).get("completed"),
+            "failed": results.get("status", {}).get("failed")
+        },
+        "results": results.get("targets", [])
+    }
+
+
+@app.post("/api/bulk/jobs/{job_id}/cancel")
+async def cancel_bulk_job_endpoint(job_id: str):
+    """Cancel a running bulk scanning job."""
+    job = get_bulk_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Job already completed")
+    
+    if job.get("status") == "cancelled":
+        raise HTTPException(status_code=400, detail="Job already cancelled")
+    
+    result = bulk_scanner.cancel_job(job_id)
+    update_bulk_job_status(job_id, "cancelled")
+    
+    return result
+
+
+@app.get("/api/bulk/stats")
+async def get_bulk_stats():
+    """Get statistics about bulk scanning jobs."""
+    jobs = list_bulk_jobs(limit=1000)
+    
+    total_jobs = len(jobs)
+    completed = sum(1 for j in jobs if j.get("status") == "completed")
+    running = sum(1 for j in jobs if j.get("status") == "running")
+    failed = sum(1 for j in jobs if j.get("status") == "failed")
+    cancelled = sum(1 for j in jobs if j.get("status") == "cancelled")
+    
+    total_targets = sum(j.get("total_targets", 0) for j in jobs)
+    completed_targets = sum(j.get("completed_count", 0) for j in jobs)
+    failed_targets = sum(j.get("failed_count", 0) for j in jobs)
+    
+    return {
+        "total_jobs": total_jobs,
+        "status_breakdown": {
+            "completed": completed,
+            "running": running,
+            "failed": failed,
+            "cancelled": cancelled,
+            "pending": total_jobs - completed - running - failed - cancelled
+        },
+        "targets": {
+            "total": total_targets,
+            "completed": completed_targets,
+            "failed": failed_targets,
+            "success_rate": (completed_targets / total_targets * 100) if total_targets > 0 else 0
+        }
+    }
+
+
+# ── Background bulk job processing ────────────────────────────────────────────
+
+async def _run_bulk_job(job_id: str):
+    """Background task to process a bulk scanning job."""
+    try:
+        update_bulk_job_status(job_id, "running")
+        update_bulk_job_timing(job_id, started_at=datetime.now().isoformat())
+        
+        logger.info(f"Starting bulk job {job_id}")
+        
+        results = await bulk_scanner.process_job(job_id)
+        
+        # Update database with results
+        update_bulk_job_status(job_id, "completed", 100)
+        update_bulk_job_timing(job_id, completed_at=datetime.now().isoformat())
+        
+        # Update target statuses
+        for target_result in results.get("results", []):
+            target_id = target_result.get("target_id")
+            status = target_result.get("status", "unknown")
+            result = target_result.get("result")
+            error = target_result.get("error")
+            
+            update_target_status(
+                target_id,
+                status,
+                result=str(result) if result else None,
+                error=error,
+                completed_at=datetime.now().isoformat()
+            )
+        
+        logger.info(f"Completed bulk job {job_id}")
+    
+    except Exception as e:
+        logger.error(f"Error in bulk job {job_id}: {str(e)}")
+        update_bulk_job_status(job_id, "failed")
+        update_bulk_job_timing(job_id, completed_at=datetime.now().isoformat())
+
+
+# ── Webhook Management ────────────────────────────────────────────────────────
+
+@app.post("/api/webhooks")
+async def register_webhook(
+    body: WebhookRegisterRequest,
+    project_id: str = Depends(require_api_key)
+) -> WebhookResponse:
+    """Register a webhook for a project."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate URL
+    if not body.url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid webhook URL")
+    
+    # Validate events
+    valid_events = {
+        "scan_started", "scan_completed", "finding_discovered",
+        "scan_failed", "report_generated", "vulnerability_fixed", "*"
+    }
+    for event in body.events:
+        if event not in valid_events:
+            raise HTTPException(status_code=400, detail=f"Invalid event type: {event}")
+    
+    # Register webhook
+    webhook_id = webhook_manager.register_webhook(
+        project_id=project_id,
+        url=body.url,
+        events=body.events,
+        secret=body.secret
+    )
+    
+    return WebhookResponse(
+        id=webhook_id,
+        project_id=project_id,
+        url=body.url,
+        events=body.events,
+        enabled=True,
+        created_at=datetime.now().isoformat()
+    )
+
+
+@app.get("/api/webhooks")
+async def list_webhooks(project_id: str = Depends(require_api_key)) -> list[WebhookResponse]:
+    """List webhooks for a project."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    webhooks = webhook_manager.get_webhooks(project_id=project_id)
+    return [WebhookResponse(**w) for w in webhooks]
+
+
+@app.delete("/api/webhooks/{webhook_id}")
+async def delete_webhook(
+    webhook_id: str,
+    project_id: str = Depends(require_api_key)
+) -> dict:
+    """Delete a webhook."""
+    webhooks = webhook_manager.get_webhooks(project_id=project_id)
+    webhook = next((w for w in webhooks if w["id"] == webhook_id), None)
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    webhook_manager.delete_webhook(webhook_id)
+    return {"ok": True}
+
+
+@app.post("/api/webhooks/{webhook_id}/enable")
+async def enable_webhook(
+    webhook_id: str,
+    project_id: str = Depends(require_api_key)
+) -> dict:
+    """Enable a webhook."""
+    webhooks = webhook_manager.get_webhooks(project_id=project_id)
+    webhook = next((w for w in webhooks if w["id"] == webhook_id), None)
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    webhook_manager.enable_webhook(webhook_id)
+    return {"ok": True}
+
+
+@app.post("/api/webhooks/{webhook_id}/disable")
+async def disable_webhook(
+    webhook_id: str,
+    project_id: str = Depends(require_api_key)
+) -> dict:
+    """Disable a webhook."""
+    webhooks = webhook_manager.get_webhooks(project_id=project_id)
+    webhook = next((w for w in webhooks if w["id"] == webhook_id), None)
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    webhook_manager.disable_webhook(webhook_id)
+    return {"ok": True}
+
+
+@app.get("/api/webhooks/{webhook_id}/logs")
+async def get_webhook_logs(
+    webhook_id: str,
+    limit: int = 50,
+    project_id: str = Depends(require_api_key)
+) -> dict:
+    """Get webhook delivery logs."""
+    webhooks = webhook_manager.get_webhooks(project_id=project_id)
+    webhook = next((w for w in webhooks if w["id"] == webhook_id), None)
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    logs = webhook_manager.get_webhook_logs(webhook_id, limit=limit)
+    stats = webhook_manager.get_webhook_stats(webhook_id)
+    
+    return {
+        "logs": logs,
+        "stats": stats
+    }
+
+
+@app.post("/api/webhooks/test")
+async def test_webhook(
+    body: WebhookTestRequest,
+    project_id: str = Depends(require_api_key)
+) -> dict:
+    """Test a webhook by sending a test event."""
+    webhooks = webhook_manager.get_webhooks(project_id=project_id)
+    webhook = next((w for w in webhooks if w["id"] == body.webhook_id), None)
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    # Send test event
+    event = WebhookEvent(
+        event_type=body.event_type,
+        project_id=project_id,
+        data={
+            "test": True,
+            "message": "This is a test event"
+        }
+    )
+    
+    result = await webhook_manager.trigger_webhook(event)
+    return result
+
+
+# ── False Positive Patterns API ────────────────────────────────────────────
+
+class FPPatternRequest(BaseModel):
+    pattern_type: str
+    description: str
+    regex_pattern: str
+    severity_impact: float = 0.6
+    keywords: list = []
+    safe_framework: Optional[str] = None
+
+
+@app.get("/api/patterns/fp")
+async def list_fp_patterns(
+    pattern_type: Optional[str] = None,
+    enabled_only: bool = True,
+    _: str = Depends(validate_api_key)
+):
+    """List all false positive patterns"""
+    try:
+        # Get patterns from both database and built-in
+        db_patterns = get_fp_patterns(enabled_only=enabled_only)
+        builtin_patterns = fp_pattern_db.list_patterns(pattern_type=pattern_type, enabled_only=enabled_only)
+        
+        # Combine and deduplicate by ID
+        all_patterns = {p["id"]: p for p in builtin_patterns}
+        for p in db_patterns:
+            if p["id"] not in all_patterns:
+                all_patterns[p["id"]] = p
+        
+        return {
+            "total": len(all_patterns),
+            "patterns": sorted(all_patterns.values(), key=lambda x: x["pattern_type"]),
+            "stats": fp_pattern_db.get_pattern_stats()
+        }
+    except Exception as e:
+        logger.error(f"Error listing FP patterns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/patterns/fp")
+async def create_fp_pattern(
+    request: FPPatternRequest,
+    _: str = Depends(validate_api_key)
+):
+    """Create a new custom false positive pattern"""
+    try:
+        # Validate regex
+        pattern_dict = request.dict()
+        pattern_id = fp_pattern_db.add_custom_pattern(pattern_dict)
+        
+        # Also save to database for persistence
+        save_fp_pattern(pattern_dict)
+        
+        return {
+            "status": "created",
+            "pattern_id": pattern_id,
+            "message": "Custom FP pattern created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error creating FP pattern: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/patterns/fp/{pattern_id}")
+async def delete_fp_pattern_endpoint(
+    pattern_id: str,
+    _: str = Depends(validate_api_key)
+):
+    """Disable or delete a false positive pattern"""
+    try:
+        # Disable in memory
+        fp_pattern_db.remove_pattern(pattern_id)
+        
+        # Also update in database
+        update_fp_pattern_status(pattern_id, False)
+        
+        return {
+            "status": "disabled",
+            "pattern_id": pattern_id,
+            "message": "Pattern disabled successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error disabling FP pattern: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/patterns/fp/{pattern_id}/enable")
+async def enable_fp_pattern_endpoint(
+    pattern_id: str,
+    _: str = Depends(validate_api_key)
+):
+    """Re-enable a disabled false positive pattern"""
+    try:
+        fp_pattern_db.enable_pattern(pattern_id)
+        update_fp_pattern_status(pattern_id, True)
+        
+        return {
+            "status": "enabled",
+            "pattern_id": pattern_id,
+            "message": "Pattern enabled successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error enabling FP pattern: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class CheckFindingRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    response_body: Optional[str] = None
+    response_headers: Optional[dict] = None
+    evidence: Optional[str] = None
+    category: Optional[str] = None
+
+
+@app.post("/api/findings/check-fp")
+async def check_finding_for_fp(
+    request: CheckFindingRequest,
+    _: str = Depends(validate_api_key)
+):
+    """Check if a finding is likely a false positive"""
+    try:
+        finding = request.dict()
+        
+        is_likely_fp, reason, matched_patterns = fp_pattern_db.check_finding_against_patterns(finding)
+        confidence_adjustment = fp_pattern_db.get_confidence_adjustment(finding)
+        
+        return {
+            "is_likely_false_positive": is_likely_fp,
+            "confidence_adjustment": confidence_adjustment,
+            "reason": reason,
+            "matched_patterns": matched_patterns,
+            "pattern_details": [
+                fp_pattern_db.patterns[pid].description
+                for pid in matched_patterns
+                if pid in fp_pattern_db.patterns
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error checking finding for FP: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/patterns/fp/stats")
+async def get_fp_pattern_stats(
+    _: str = Depends(validate_api_key)
+):
+    """Get statistics about false positive patterns"""
+    try:
+        return {
+            "stats": fp_pattern_db.get_pattern_stats(),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting FP stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── OpenAPI / Swagger Documentation ───────────────────────────────────────────
