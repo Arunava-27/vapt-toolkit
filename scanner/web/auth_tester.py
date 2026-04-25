@@ -17,6 +17,8 @@ from urllib.parse import urljoin, urlparse
 import hashlib
 import base64
 
+from .confidence_scorer import ConfidenceScorer, ConfidenceLevel
+
 logger = logging.getLogger(__name__)
 
 
@@ -540,3 +542,510 @@ class AuthenticationTester:
             logger.warning(f"Authentication test failed: {e}")
 
         return findings
+
+
+
+
+class OAuth2Tester:
+    
+
+    OAUTH_ENDPOINTS = [
+        "/oauth", "/oauth/authorize", "/oauth/token", 
+        "/auth", "/authorize", "/token",
+        "/.well-known/openid-configuration",
+        "/oauth2", "/oauth2/authorize", "/oauth2/token"
+    ]
+
+    @staticmethod
+    def find_oauth_endpoints(base_url: str, timeout: float = 10.0, 
+                            verify_ssl: bool = True) -> List[Dict[str, Any]]:
+        
+        endpoints = []
+        
+        for path in OAuth2Tester.OAUTH_ENDPOINTS:
+            test_url = urljoin(base_url, path)
+            try:
+                resp = requests.head(test_url, timeout=timeout, verify=verify_ssl, 
+                                   allow_redirects=True)
+                if resp.status_code < 400:
+                    endpoints.append({
+                        "url": test_url,
+                        "status": resp.status_code,
+                        "type": "authorize" if "authorize" in path.lower() else 
+                               "token" if "token" in path.lower() else "config"
+                    })
+            except requests.RequestException:
+                pass
+        
+        return endpoints
+
+    @staticmethod
+    def check_implicit_grant_vulnerability(authorize_url: str, 
+                                          timeout: float = 10.0,
+                                          verify_ssl: bool = True) -> List[Dict]:
+        
+        findings = []
+        
+        try:
+            # Test if implicit flow is allowed
+            test_params = {
+                "response_type": "token",
+                "client_id": "test-client",
+                "redirect_uri": "http://localhost:8080/callback",
+                "scope": "openid profile email"
+            }
+            
+            resp = requests.get(authorize_url, params=test_params, 
+                              timeout=timeout, verify=verify_ssl)
+            
+            # If endpoint accepts implicit grant, it's a finding
+            if "access_token" in resp.text or "#access_token" in resp.text:
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "OAuth2", ["implicit_grant_exposure"],
+                    {"implicit_flow_detected": True},
+                    {"token_in_url": True}
+                )
+                findings.append({
+                    "type": "OAuth2",
+                    "severity": "High",
+                    "title": "Implicit Grant Flow Enabled",
+                    "description": "OAuth 2.0 implicit grant flow is enabled, exposing tokens in URL",
+                    "endpoint": authorize_url,
+                    "evidence": "Implicit flow accepted by authorization endpoint",
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "recommendation": "Use authorization code flow with PKCE instead"
+                })
+        except requests.RequestException:
+            pass
+        
+        return findings
+
+    @staticmethod
+    def check_pkce_protection(authorize_url: str, token_url: str,
+                            timeout: float = 10.0,
+                            verify_ssl: bool = True) -> List[Dict]:
+        
+        findings = []
+        
+        try:
+            # Test authorization code grant without PKCE
+            test_params = {
+                "response_type": "code",
+                "client_id": "test-client",
+                "redirect_uri": "http://localhost:8080/callback",
+                "scope": "openid profile email"
+            }
+            
+            resp = requests.get(authorize_url, params=test_params,
+                              timeout=timeout, verify=verify_ssl)
+            
+            # If it returns a code without requiring code_challenge, PKCE is not enforced
+            if "code=" in resp.text or "code=" in resp.headers.get("Location", ""):
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "OAuth2", ["missing_pkce"],
+                    {"pkce_not_enforced": True},
+                    {"auth_code_obtained": True}
+                )
+                findings.append({
+                    "type": "OAuth2",
+                    "severity": "High",
+                    "title": "PKCE Not Enforced",
+                    "description": "Authorization endpoint doesn't enforce PKCE protection",
+                    "endpoint": authorize_url,
+                    "evidence": "Authorization code issued without code_challenge requirement",
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "recommendation": "Enforce code_challenge (PKCE) requirement"
+                })
+        except requests.RequestException:
+            pass
+        
+        return findings
+
+    @staticmethod
+    def check_redirect_uri_validation(authorize_url: str, 
+                                    timeout: float = 10.0,
+                                    verify_ssl: bool = True) -> List[Dict]:
+        
+        findings = []
+        
+        malicious_redirects = [
+            "http://attacker.com/callback",
+            "http://localhost:8080/callback",
+            "data://inject",
+            "javascript://inject"
+        ]
+        
+        for redirect in malicious_redirects:
+            try:
+                test_params = {
+                    "response_type": "code",
+                    "client_id": "test-client",
+                    "redirect_uri": redirect,
+                    "scope": "openid profile email"
+                }
+                
+                resp = requests.get(authorize_url, params=test_params,
+                                  timeout=timeout, verify=verify_ssl,
+                                  allow_redirects=False)
+                
+                # If redirect is accepted, it's a vulnerability
+                if resp.status_code in [301, 302, 307, 308]:
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "OAuth2", ["open_redirect"],
+                        {"malicious_redirect_accepted": True},
+                        {"redirect_url": redirect}
+                    )
+                    findings.append({
+                        "type": "OAuth2",
+                        "severity": "High",
+                        "title": "Open Redirect in OAuth Flow",
+                        "description": f"Malicious redirect URI accepted: {redirect}",
+                        "endpoint": authorize_url,
+                        "evidence": f"Redirect accepted for {redirect}",
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "recommendation": "Implement strict redirect URI validation"
+                    })
+                    break
+            except requests.RequestException:
+                pass
+        
+        return findings
+
+    @staticmethod
+    def check_scope_validation(authorize_url: str,
+                             timeout: float = 10.0,
+                             verify_ssl: bool = True) -> List[Dict]:
+        
+        findings = []
+        
+        excessive_scopes = [
+            "admin read write delete",
+            "user:email user:profile admin",
+            "*",
+            ""
+        ]
+        
+        for scope in excessive_scopes:
+            try:
+                test_params = {
+                    "response_type": "code",
+                    "client_id": "test-client",
+                    "redirect_uri": "http://localhost:8080/callback",
+                    "scope": scope
+                }
+                
+                resp = requests.get(authorize_url, params=test_params,
+                                  timeout=timeout, verify=verify_ssl)
+                
+                if resp.status_code < 400:
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "OAuth2", ["excessive_scope"],
+                        {"invalid_scope_accepted": True},
+                        {"scope": scope}
+                    )
+                    findings.append({
+                        "type": "OAuth2",
+                        "severity": "Medium",
+                        "title": "No Scope Validation",
+                        "description": f"Excessive scope accepted: '{scope}'",
+                        "endpoint": authorize_url,
+                        "evidence": f"Scope '{scope}' was accepted without validation",
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "recommendation": "Implement strict scope validation"
+                    })
+            except requests.RequestException:
+                pass
+        
+        return findings
+
+
+class SSO_SAMLTester:
+    
+
+    @staticmethod
+    def find_saml_endpoints(base_url: str, html_content: str = None,
+                           timeout: float = 10.0,
+                           verify_ssl: bool = True) -> List[str]:
+        
+        endpoints = []
+        
+        saml_paths = [
+            "/saml", "/saml/acs", "/saml/sso", "/saml/metadata",
+            "/auth/saml", "/auth/saml/acs", "/auth/saml/metadata",
+            "/.well-known/saml-metadata"
+        ]
+        
+        for path in saml_paths:
+            test_url = urljoin(base_url, path)
+            try:
+                resp = requests.head(test_url, timeout=timeout, verify=verify_ssl)
+                if resp.status_code < 400:
+                    endpoints.append(test_url)
+            except requests.RequestException:
+                pass
+        
+        # Check HTML for SAML endpoints
+        if html_content:
+            saml_patterns = [
+                r'action=["\']([^"\']*saml[^"\']*)["\']',
+                r'href=["\']([^"\']*saml[^"\']*)["\']'
+            ]
+            for pattern in saml_patterns:
+                for match in re.finditer(pattern, html_content, re.IGNORECASE):
+                    url = urljoin(base_url, match.group(1))
+                    if url not in endpoints:
+                        endpoints.append(url)
+        
+        return endpoints
+
+    @staticmethod
+    def parse_saml_response(saml_response_b64: str) -> Optional[Dict]:
+        
+        try:
+            saml_response = base64.b64decode(saml_response_b64).decode('utf-8')
+            
+            # Extract assertions
+            findings = {
+                "raw": saml_response,
+                "has_signature": "<Signature" in saml_response,
+                "has_encrypted_data": "<EncryptedData" in saml_response,
+                "assertions": []
+            }
+            
+            # Extract Subject
+            subject_match = re.search(r'<Subject>(.*?)</Subject>', saml_response, re.DOTALL)
+            if subject_match:
+                findings["subject"] = subject_match.group(1)
+            
+            # Extract Audience
+            audience_match = re.search(r'<Audience>(.*?)</Audience>', saml_response)
+            if audience_match:
+                findings["audience"] = audience_match.group(1)
+            
+            # Extract Attributes
+            for attr_match in re.finditer(r'<Attribute.*?Name="([^"]*)".*?>(.*?)</Attribute>', 
+                                         saml_response, re.DOTALL):
+                findings["assertions"].append({
+                    "name": attr_match.group(1),
+                    "value": attr_match.group(2)
+                })
+            
+            return findings
+        except Exception as e:
+            logger.debug(f"Failed to parse SAML: {e}")
+            return None
+
+    @staticmethod
+    def check_xml_signature_validation(saml_response: str) -> List[Dict]:
+        
+        findings = []
+        
+        # Check if signature is present
+        if "<Signature" not in saml_response:
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "SSO", ["missing_signature"],
+                {"signature_missing": True},
+                {}
+            )
+            findings.append({
+                "type": "SSO/SAML",
+                "severity": "Critical",
+                "title": "Missing XML Signature",
+                "description": "SAML response is not signed",
+                "evidence": "No Signature element found in SAML",
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "recommendation": "Sign all SAML responses with trusted certificate"
+            })
+        
+        # Check for XXE vulnerabilities
+        if "<!DOCTYPE" in saml_response or "<!ENTITY" in saml_response:
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "SSO", ["xxe_vulnerability"],
+                {"xxe_pattern_found": True},
+                {}
+            )
+            findings.append({
+                "type": "SSO/SAML",
+                "severity": "High",
+                "title": "Potential XXE Vulnerability",
+                "description": "SAML parser may be vulnerable to XXE attacks",
+                "evidence": "DOCTYPE or ENTITY declarations in SAML",
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "recommendation": "Disable XML external entities in parser"
+            })
+        
+        return findings
+
+    @staticmethod
+    def check_audience_validation(saml_response: str, expected_audience: str) -> List[Dict]:
+        
+        findings = []
+        
+        audience_match = re.search(r'<Audience>(.*?)</Audience>', saml_response)
+        if not audience_match:
+            conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                "SSO", ["missing_audience"],
+                {"audience_missing": True},
+                {}
+            )
+            findings.append({
+                "type": "SSO/SAML",
+                "severity": "High",
+                "title": "Missing Audience Restriction",
+                "description": "SAML response doesn't specify audience restriction",
+                "evidence": "No Audience element in Conditions",
+                "confidence_score": conf_score,
+                "confidence_level": conf_level,
+                "recommendation": "Always include Audience restriction in assertions"
+            })
+        elif audience_match.group(1) != expected_audience:
+            logger.warning(f"Audience mismatch: {audience_match.group(1)} != {expected_audience}")
+        
+        return findings
+
+
+class MFATester:
+    
+
+    @staticmethod
+    def check_mfa_requirement(login_url: str, username: str, password: str,
+                            timeout: float = 10.0,
+                            verify_ssl: bool = True) -> List[Dict]:
+        
+        findings = []
+        
+        try:
+            # Attempt login
+            response = requests.post(login_url, data={
+                "username": username,
+                "password": password
+            }, timeout=timeout, verify=verify_ssl)
+            
+            # Check if MFA challenge is presented
+            mfa_indicators = [
+                "totp", "otp", "mfa", "2fa", "two.factor", "authenticator",
+                "verification code", "challenge"
+            ]
+            
+            has_mfa = any(indicator in response.text.lower() 
+                         for indicator in mfa_indicators)
+            
+            if not has_mfa and response.status_code == 200:
+                conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                    "Authentication", ["missing_mfa"],
+                    {"mfa_not_enforced": True},
+                    {"successful_without_mfa": True}
+                )
+                findings.append({
+                    "type": "Authentication",
+                    "severity": "High",
+                    "title": "MFA Not Required",
+                    "description": "Login successful without MFA",
+                    "endpoint": login_url,
+                    "evidence": "No MFA challenge presented after successful password auth",
+                    "confidence_score": conf_score,
+                    "confidence_level": conf_level,
+                    "recommendation": "Enforce MFA for all user accounts"
+                })
+        except requests.RequestException:
+            pass
+        
+        return findings
+
+    @staticmethod
+    def check_mfa_bypass_techniques(verify_url: str,
+                                   timeout: float = 10.0,
+                                   verify_ssl: bool = True) -> List[Dict]:
+        
+        findings = []
+        
+        bypass_attempts = [
+            {"code": "000000", "description": "Empty/default code"},
+            {"code": "123456", "description": "Sequential code"},
+            {"code": "111111", "description": "Repeated digit"},
+        ]
+        
+        for attempt in bypass_attempts:
+            try:
+                response = requests.post(verify_url, data={
+                    "code": attempt["code"]
+                }, timeout=timeout, verify=verify_ssl)
+                
+                if "success" in response.text.lower() or response.status_code == 200:
+                    conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                        "Authentication", ["mfa_bypass"],
+                        {"weak_code_accepted": True},
+                        {"code": attempt["code"]}
+                    )
+                    findings.append({
+                        "type": "Authentication",
+                        "severity": "Critical",
+                        "title": "MFA Bypass - Weak Code",
+                        "description": f"MFA verification accepted {attempt['description']}",
+                        "endpoint": verify_url,
+                        "evidence": f"Code '{attempt['code']}' accepted",
+                        "confidence_score": conf_score,
+                        "confidence_level": conf_level,
+                        "recommendation": "Implement rate limiting and proper code validation"
+                    })
+                    break
+                
+                time.sleep(1)  # Rate limiting
+            except requests.RequestException:
+                pass
+        
+        return findings
+
+    @staticmethod
+    def check_backup_codes_validation(backup_codes: List[str],
+                                     verify_endpoint: str,
+                                     timeout: float = 10.0,
+                                     verify_ssl: bool = True) -> List[Dict]:
+        
+        findings = []
+        
+        if not backup_codes:
+            return findings
+        
+        # Test if backup codes can be reused
+        for code in backup_codes[:3]:
+            try:
+                response1 = requests.post(verify_endpoint, data={
+                    "backup_code": code
+                }, timeout=timeout, verify=verify_ssl)
+                
+                if response1.status_code == 200:
+                    # Try using same code again
+                    response2 = requests.post(verify_endpoint, data={
+                        "backup_code": code
+                    }, timeout=timeout, verify=verify_ssl)
+                    
+                    if response2.status_code == 200:
+                        conf_score, conf_level = ConfidenceScorer.calculate_confidence(
+                            "Authentication", ["backup_code_reuse"],
+                            {"code_reused": True},
+                            {"code": code}
+                        )
+                        findings.append({
+                            "type": "Authentication",
+                            "severity": "High",
+                            "title": "Backup Code Reuse",
+                            "description": "Same backup code accepted multiple times",
+                            "endpoint": verify_endpoint,
+                            "evidence": "Backup code reused successfully",
+                            "confidence_score": conf_score,
+                            "confidence_level": conf_level,
+                            "recommendation": "Invalidate backup codes after single use"
+                        })
+                        break
+            except requests.RequestException:
+                pass
+        
+        return findings
+
