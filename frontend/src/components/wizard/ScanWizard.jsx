@@ -44,13 +44,11 @@ export default function ScanWizard({ onScanStart, onCancel }) {
   };
 
   const handleLaunchScan = () => {
-    const scanRequest = {
+    onScanStart({
       targets: wizardData.targets,
-      classification: wizardData.classification,
       modules: wizardData.modules,
-      scanType: determineScanType(wizardData),
-    };
-    onScanStart(scanRequest);
+      classification: wizardData.classification,
+    });
   };
 
   const isStepValid = validateStep(currentStep);
@@ -138,10 +136,4 @@ export default function ScanWizard({ onScanStart, onCancel }) {
       </div>
     </div>
   );
-}
-
-function determineScanType(wizardData) {
-  if (wizardData.classification === "passive") return "passive";
-  if (wizardData.classification === "active") return "active";
-  return "hybrid";
 }

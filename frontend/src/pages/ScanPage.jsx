@@ -121,7 +121,7 @@ export default function ScanPage() {
       port_extra_flags: "",
       web_depth: 1,
       recon_wordlist: "subdomains-top5000.txt",
-      scan_classification: wizardRequest.scanType || "active",
+      scan_classification: wizardRequest.classification || "active",
     };
     
     // If multiple targets, use bulk API
