@@ -78,22 +78,46 @@ export default function ScanPage() {
   const hasResults = Object.keys(results).length > 0;
 
   const handleScan = async (scanConfig = config) => {
+    // Clean the config to remove any React internals before sending
+    const cleanConfig = {
+      target: String(scanConfig.target || ""),
+      recon: Boolean(scanConfig.recon),
+      ports: Boolean(scanConfig.ports),
+      cve: Boolean(scanConfig.cve),
+      web: Boolean(scanConfig.web),
+      full_scan: Boolean(scanConfig.full_scan),
+      port_range: String(scanConfig.port_range || "top-1000"),
+      scan_type: String(scanConfig.scan_type || "connect"),
+      version_detect: Boolean(scanConfig.version_detect),
+      os_detect: Boolean(scanConfig.os_detect),
+      port_script: String(scanConfig.port_script || ""),
+      port_timing: Number(scanConfig.port_timing || 4),
+      skip_ping: Boolean(scanConfig.skip_ping),
+      port_extra_flags: String(scanConfig.port_extra_flags || ""),
+      web_depth: Number(scanConfig.web_depth || 1),
+      recon_wordlist: String(scanConfig.recon_wordlist || "subdomains-top5000.txt"),
+      scan_classification: String(scanConfig.scan_classification || "active"),
+      scope: Array.isArray(scanConfig.scope) ? scanConfig.scope : [],
+      override_robots_txt: Boolean(scanConfig.override_robots_txt),
+      existing_ports: Array.isArray(scanConfig.existing_ports) ? scanConfig.existing_ports : [],
+    };
+    
     try {
       const res  = await fetch("/api/scan/validate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(scanConfig),
+        body:    JSON.stringify(cleanConfig),
       });
       const data = await res.json();
       if (data.warnings && data.warnings.length > 0) {
         setWarnings(data.warnings);
-        setPendingConfig(scanConfig);
+        setPendingConfig(cleanConfig);
       } else {
-        setConfig(scanConfig);
-        startScan(scanConfig);
+        setConfig(cleanConfig);
+        startScan(cleanConfig);
       }
     } catch {
-      startScan(scanConfig); // validation failed → proceed anyway
+      startScan(cleanConfig); // validation failed → proceed anyway
     }
   };
 
