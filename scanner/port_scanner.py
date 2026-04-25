@@ -131,9 +131,154 @@ class PortScanner:
             return args, ports_arg
 
         return args, self.port_range if self.port_range else None
+    
+    def _parse_nmap_xml(self, xml_str: str, args: str) -> dict:
+        """Parse nmap XML output from WSL nmap scan."""
+        import logging
+        import xml.etree.ElementTree as ET
+        logger = logging.getLogger(__name__)
+        
+        try:
+            root = ET.fromstring(xml_str)
+        except Exception as e:
+            logger.error(f"[PORT_SCANNER] Failed to parse XML: {str(e)}")
+            return {
+                "target": self.target,
+                "host_info": {},
+                "os_info": {},
+                "open_ports": [],
+                "traceroute": [],
+                "scan_args": args,
+                "error": f"Failed to parse nmap XML: {str(e)}"
+            }
+        
+        open_ports = []
+        os_info = {}
+        host_info = {}
+        traceroute = []
+        
+        # Parse host information
+        for host in root.findall('.//host'):
+            status = host.find('status')
+            if status is None or status.get('state') != 'up':
+                continue
+            
+            addr = host.find('address[@addr]')
+            target_ip = addr.get('addr') if addr is not None else self.target
+            
+            # Host name
+            hostname_elem = host.find('hostnames/hostname[@name]')
+            hostname = hostname_elem.get('name') if hostname_elem is not None else ""
+            
+            # Host state
+            host_state = status.get('state', 'unknown')
+            
+            # MAC and vendor
+            mac_addr = ""
+            vendor = ""
+            for addr in host.findall('address'):
+                if addr.get('addrtype') == 'mac':
+                    mac_addr = addr.get('addr', '')
+                    vendor_elem = host.find(f"address[@vendor][@addr='{mac_addr}']")
+                    if vendor_elem is not None:
+                        vendor = vendor_elem.get('vendor', '')
+            
+            host_info = {
+                "ip": target_ip,
+                "hostname": hostname,
+                "state": host_state,
+                "mac": mac_addr,
+                "vendor": vendor,
+            }
+            
+            # OS detection
+            osmatch = host.find('os/osmatch[@name]')
+            if osmatch is not None:
+                os_classes = osmatch.findall('osclass')
+                cpe_str = ""
+                if os_classes:
+                    cpes = os_classes[0].findall('cpe')
+                    cpe_str = cpes[0].text if cpes else ""
+                
+                os_info = {
+                    "name": osmatch.get('name', ''),
+                    "accuracy": int(osmatch.get('accuracy', 0)),
+                    "cpe": cpe_str,
+                    "type": os_classes[0].get('type', '') if os_classes else "",
+                    "osfamily": os_classes[0].get('osfamily', '') if os_classes else "",
+                    "osgen": os_classes[0].get('osgen', '') if os_classes else "",
+                    "all_matches": []
+                }
+                
+                # All OS matches
+                for om in host.findall('os/osmatch'):
+                    os_info["all_matches"].append({
+                        "name": om.get('name', ''),
+                        "accuracy": int(om.get('accuracy', 0))
+                    })
+                os_info["all_matches"] = os_info["all_matches"][:5]
+            
+            # Traceroute
+            traceroute_elem = host.find('trace')
+            if traceroute_elem is not None:
+                for hop in traceroute_elem.findall('hop'):
+                    traceroute.append({
+                        "hop": int(hop.get('ttl', 0)),
+                        "ip": hop.get('ipaddr', ''),
+                        "rtt": hop.get('rtt', '')
+                    })
+            
+            # Ports
+            for port in host.findall('.//port'):
+                state_elem = port.find('state')
+                if state_elem is None or state_elem.get('state') not in ('open', 'open|filtered'):
+                    continue
+                
+                proto = port.get('protocol', 'tcp')
+                port_num = port.get('portid', '')
+                
+                service_elem = port.find('service[@name]')
+                service_name = service_elem.get('name', '') if service_elem is not None else ''
+                product = service_elem.get('product', '') if service_elem is not None else ''
+                version = service_elem.get('version', '') if service_elem is not None else ''
+                extrainfo = service_elem.get('extrainfo', '') if service_elem is not None else ''
+                conf = int(service_elem.get('conf', 0)) if service_elem is not None else 0
+                
+                # Scripts
+                scripts = {}
+                for script in port.findall('script'):
+                    script_id = script.get('id', '')
+                    script_output = script.get('output', '')
+                    if script_id:
+                        scripts[script_id] = script_output.strip()
+                
+                open_ports.append({
+                    "port": int(port_num) if port_num.isdigit() else port_num,
+                    "proto": proto,
+                    "state": state_elem.get('state') if state_elem is not None else 'unknown',
+                    "service": service_name,
+                    "product": product,
+                    "version": version,
+                    "extrainfo": extrainfo,
+                    "conf": conf,
+                    "scripts": scripts,
+                })
+        
+        logger.info(f"[PORT_SCANNER] Parsed {len(open_ports)} open ports from XML")
+        return {
+            "target": self.target,
+            "host_info": host_info,
+            "os_info": os_info,
+            "open_ports": open_ports,
+            "traceroute": traceroute,
+            "scan_args": args
+        }
 
     def run(self) -> dict:
         import logging
+        import platform
+        import tempfile
+        import xml.etree.ElementTree as ET
         logger = logging.getLogger(__name__)
         logger.info(f"[PORT_SCANNER] run() called for target {self.target}")
         
@@ -141,22 +286,97 @@ class PortScanner:
             logger.info(f"[PORT_SCANNER] Scan stopped, returning empty results")
             return {"target": self.target, "host_info": {}, "os_info": {}, "open_ports": [], "traceroute": [], "scan_args": ""}
         
-        # Check if nmap is available (including WSL)
-        if not wsl.nmap_path:
-            logger.error(f"[PORT_SCANNER] Nmap not found")
-            return {
-                "target": self.target,
-                "host_info": {},
-                "os_info": {},
-                "open_ports": [],
-                "traceroute": [],
-                "scan_args": "",
-                "error": f"Nmap not found. Install with: apt install nmap (WSL) or choco install nmap (Windows)"
-            }
+        # Determine which nmap to use
+        use_wsl = False
+        if wsl.nmap_path and wsl.nmap_path.startswith('/'):
+            # WSL path detected (Linux path like /usr/bin/nmap)
+            use_wsl = True
+            logger.info(f"[PORT_SCANNER] Using WSL nmap at {wsl.nmap_path}")
+        elif platform.system() == "Windows":
+            # Windows nmap
+            logger.info(f"[PORT_SCANNER] Using Windows nmap")
+        else:
+            # Linux/other
+            if not wsl.nmap_path:
+                logger.error(f"[PORT_SCANNER] Nmap not found")
+                return {
+                    "target": self.target,
+                    "host_info": {},
+                    "os_info": {},
+                    "open_ports": [],
+                    "traceroute": [],
+                    "scan_args": "",
+                    "error": f"Nmap not found. Install with: apt install nmap"
+                }
+            use_wsl = True
+            logger.info(f"[PORT_SCANNER] Using Linux nmap at {wsl.nmap_path}")
         
-        # Create nmap scanner
-        # NOTE: Don't pass WSL paths to PortScanner - python-nmap runs on Windows
-        # and can't execute /usr/bin/nmap directly. Let PortScanner find Windows nmap.
+        # Build nmap arguments
+        self._nm = None
+        args, ports_arg = self._build_args()
+        
+        # Use WSL nmap via wsl.run_nmap_command() if needed (for network access to targets)
+        if use_wsl:
+            try:
+                logger.info(f"[PORT_SCANNER] Using WSL nmap via wsl.run_nmap_command()")
+                
+                # Build full nmap command
+                nmap_args = [self.target]
+                if ports_arg:
+                    nmap_args.extend(['-p', ports_arg])
+                nmap_args.extend(args.split())
+                nmap_args.insert(0, '-oX')  # Add XML output first
+                
+                # Create temp file for XML output
+                import uuid
+                temp_xml = f"/tmp/nmap_{uuid.uuid4().hex}.xml"
+                nmap_args.insert(1, temp_xml)
+                
+                logger.info(f"[PORT_SCANNER] Running: nmap {' '.join(nmap_args)}")
+                result = wsl.run_nmap_command(nmap_args)
+                
+                if result.returncode != 0:
+                    logger.error(f"[PORT_SCANNER] Nmap failed: {result.stderr}")
+                    return {
+                        "target": self.target,
+                        "host_info": {},
+                        "os_info": {},
+                        "open_ports": [],
+                        "traceroute": [],
+                        "scan_args": args,
+                        "error": f"Nmap scan failed: {result.stderr}"
+                    }
+                
+                # Read and parse XML output from WSL
+                try:
+                    import subprocess
+                    read_result = subprocess.run(
+                        ["wsl.exe", "cat", temp_xml],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    xml_str = read_result.stdout
+                except Exception as e:
+                    logger.error(f"[PORT_SCANNER] Failed to read XML: {str(e)}")
+                    xml_str = ""
+                
+                logger.info(f"[PORT_SCANNER] Nmap XML output received ({len(xml_str)} bytes)")
+                return self._parse_nmap_xml(xml_str, args)
+                
+            except Exception as e:
+                logger.error(f"[PORT_SCANNER] WSL nmap execution failed: {str(e)}")
+                return {
+                    "target": self.target,
+                    "host_info": {},
+                    "os_info": {},
+                    "open_ports": [],
+                    "traceroute": [],
+                    "scan_args": args,
+                    "error": f"WSL nmap failed: {str(e)}"
+                }
+        
+        # Use python-nmap for Windows nmap
         try:
             logger.info(f"[PORT_SCANNER] Creating nmap PortScanner")
             nm = nmap.PortScanner()
@@ -174,7 +394,6 @@ class PortScanner:
             }
         
         self._nm = nm
-        args, ports_arg = self._build_args()
         logger.info(f"[PORT_SCANNER] Starting nmap scan with args: {args}")
         nm.scan(self.target, ports_arg, arguments=args)
         logger.info(f"[PORT_SCANNER] nmap scan completed")

@@ -103,10 +103,13 @@ class WSLConfig:
                 "Windows: choco install nmap  OR  WSL: sudo apt install nmap"
             )
 
-        # If nmap is in WSL, run via wsl.exe
-        if platform.system() == "Windows" and "/mnt/" in self.nmap_path or self.is_wsl:
+        # If nmap_path is a Unix-style path (starts with /), run via WSL
+        # This includes both /usr/bin/nmap and /mnt/... paths
+        if self.nmap_path.startswith('/'):
+            # Run via wsl.exe - just use "nmap" command name, not the full path
             full_cmd = ["wsl.exe", "nmap"] + args
         else:
+            # Windows path - use directly
             full_cmd = [self.nmap_path] + args
 
         return subprocess.run(full_cmd, capture_output=True, text=True)
@@ -119,10 +122,12 @@ class WSLConfig:
                 "WSL: sudo apt install exploitdb"
             )
 
-        # If searchsploit is in WSL, run via wsl.exe
-        if platform.system() == "Windows" and "/mnt/" in self.searchsploit_path or self.is_wsl:
+        # If searchsploit_path is a Unix-style path (starts with /), run via WSL
+        if self.searchsploit_path.startswith('/'):
+            # Run via wsl.exe
             full_cmd = ["wsl.exe", "searchsploit"] + args
         else:
+            # Windows path - use directly
             full_cmd = [self.searchsploit_path] + args
 
         return subprocess.run(full_cmd, capture_output=True, text=True)
