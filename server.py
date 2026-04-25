@@ -951,8 +951,17 @@ async def _execute_scan(state: ScanState):
         if (req.web or req.full_scan or is_active or is_hybrid) and not is_passive and state.status != "stopped":
             push("module_start", module="web")
             try:
-                url = req.target if req.target.startswith("http") else f"https://{req.target}"
-                web_scanner = WebScanner(url, depth=req.web_depth)
+                # If ports were found, prefer HTTP over HTTPS
+                web_url = req.target
+                if not web_url.startswith("http"):
+                    # Check if HTTP ports are open (80, 8080, 8000, etc.)
+                    http_ports = [p.get("port") for p in open_ports if p.get("proto") == "TCP" and p.get("port") in [80, 8000, 8080, 8009, 8180, 8888, 3000]]
+                    if http_ports:
+                        web_url = f"http://{req.target}:{http_ports[0]}"
+                    else:
+                        web_url = f"https://{req.target}"
+                
+                web_scanner = WebScanner(web_url, depth=req.web_depth)
                 results["web"] = await web_scanner.run(progress_cb=push_progress)
                 push("web", data=results["web"])
             except Exception as e:
@@ -962,11 +971,19 @@ async def _execute_scan(state: ScanState):
         if (req.web_vulnerability_scan or req.full_scan or is_active or is_hybrid) and not is_passive and state.status != "stopped":
             push("module_start", module="web_vulnerabilities")
             try:
-                url = req.target if req.target.startswith("http") else f"https://{req.target}"
+                # If ports were found, prefer HTTP over HTTPS
+                web_url = req.target
+                if not web_url.startswith("http"):
+                    # Check if HTTP ports are open (80, 8080, 8000, etc.)
+                    http_ports = [p.get("port") for p in open_ports if p.get("proto") == "TCP" and p.get("port") in [80, 8000, 8080, 8009, 8180, 8888, 3000]]
+                    if http_ports:
+                        web_url = f"http://{req.target}:{http_ports[0]}"
+                    else:
+                        web_url = f"https://{req.target}"
                 
                 # Build web scan configuration from request
                 web_config = WebScanConfiguration(
-                    target_url=url,
+                    target_url=web_url,
                     scope=req.scope,
                     scope_strict=True,
                     override_robots_txt=req.override_robots_txt,

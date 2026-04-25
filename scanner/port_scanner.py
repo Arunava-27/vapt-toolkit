@@ -133,11 +133,17 @@ class PortScanner:
         return args, self.port_range if self.port_range else None
 
     def run(self) -> dict:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[PORT_SCANNER] run() called for target {self.target}")
+        
         if self._stopped:
+            logger.info(f"[PORT_SCANNER] Scan stopped, returning empty results")
             return {"target": self.target, "host_info": {}, "os_info": {}, "open_ports": [], "traceroute": [], "scan_args": ""}
         
         # Check if nmap is available (including WSL)
         if not wsl.nmap_path:
+            logger.error(f"[PORT_SCANNER] Nmap not found")
             return {
                 "target": self.target,
                 "host_info": {},
@@ -152,8 +158,11 @@ class PortScanner:
         # NOTE: Don't pass WSL paths to PortScanner - python-nmap runs on Windows
         # and can't execute /usr/bin/nmap directly. Let PortScanner find Windows nmap.
         try:
+            logger.info(f"[PORT_SCANNER] Creating nmap PortScanner")
             nm = nmap.PortScanner()
+            logger.info(f"[PORT_SCANNER] nmap PortScanner created successfully")
         except Exception as e:
+            logger.error(f"[PORT_SCANNER] Nmap initialization failed: {str(e)}")
             return {
                 "target": self.target,
                 "host_info": {},
@@ -166,7 +175,10 @@ class PortScanner:
         
         self._nm = nm
         args, ports_arg = self._build_args()
+        logger.info(f"[PORT_SCANNER] Starting nmap scan with args: {args}")
         nm.scan(self.target, ports_arg, arguments=args)
+        logger.info(f"[PORT_SCANNER] nmap scan completed")
+        logger.info(f"[PORT_SCANNER] Found {len(nm.all_hosts())} hosts")
         self._nm = None
         if self._stopped:
             return {"target": self.target, "host_info": {}, "os_info": {}, "open_ports": [], "traceroute": [], "scan_args": args}
