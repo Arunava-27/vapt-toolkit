@@ -128,7 +128,7 @@ export default function Step4_Review({ wizardData, onLaunchScan }) {
 
       {/* Action Buttons */}
       <div className="review-actions">
-        <button className="btn-launch" onClick={onLaunchScan}>
+        <button className="btn-launch" onClick={() => onLaunchScan()}>
           🚀 Start Scan
         </button>
         <p className="action-hint">
