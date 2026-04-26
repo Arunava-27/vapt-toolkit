@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from database import get_project
 from scanner.json_scan_executor import JSONScanExecutor, JSONScanValidator
@@ -16,6 +17,59 @@ from ..services.scan_service import _execute_scan
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ── Request/Response Models ───────────────────────────────────────────
+
+class ScanRequest(BaseModel):
+    """Request to start a standard vulnerability scan."""
+    target: str
+    recon: bool = False
+    ports: bool = False
+    web: bool = False
+    cve: bool = False
+    full_scan: bool = False
+    scan_classification: str = "active"
+    port_range: str = "top-1000"
+    version_detect: bool = False
+    scan_type: str = "connect"
+    os_detect: bool = False
+    port_script: str = ""
+    port_timing: int = 4
+    skip_ping: bool = True
+    port_extra_flags: str = ""
+    web_depth: int = 1
+    web_vulnerability_scan: bool = False
+    web_test_injection: bool = True
+    web_test_xss: bool = True
+    web_test_auth: bool = True
+    web_test_idor: bool = True
+    web_test_csrf_ssrf: bool = True
+    web_test_file_upload: bool = True
+    web_test_misconfiguration: bool = True
+    web_test_sensitive_data: bool = True
+    web_test_business_logic: bool = True
+    web_test_rate_limiting: bool = True
+    recon_wordlist: str = "subdomains-top5000.txt"
+    existing_ports: Optional[list] = None
+    project_name: Optional[str] = None
+    project_id: Optional[str] = None
+    scope: Optional[list[str]] = None
+    override_robots_txt: bool = False
+    schedule_id: Optional[str] = None
+    notification_config: Optional[dict] = None
+
+
+class JSONScanRequest(BaseModel):
+    """Request to start a scan from JSON instruction."""
+    json_instruction: str
+    project_name: Optional[str] = None
+    project_id: Optional[str] = None
+
+
+class JSONScanValidationRequest(BaseModel):
+    """Request to validate JSON scan instruction."""
+    json_instruction: str
 
 # These would be initialized in main.py
 json_scan_executor = None
@@ -42,18 +96,18 @@ def _gc_scans():
 
 # JSON Scan Endpoints
 
+class JSONScanValidationResponse(BaseModel):
+    """Response for JSON validation."""
+    is_valid: bool
+    errors: list = []
+    suggestions: list = []
+
+
 @router.post("/scans/json/validate")
-async def validate_json_scan(req):
+async def validate_json_scan(req: JSONScanValidationRequest):
     """Validate a JSON scan instruction."""
     is_valid, errors = json_scan_validator.validate_json(req.json_instruction)
     suggestions = json_scan_executor.suggest_corrections(req.json_instruction) if not is_valid else []
-    
-    from pydantic import BaseModel
-    
-    class JSONScanValidationResponse(BaseModel):
-        is_valid: bool
-        errors: list = []
-        suggestions: list = []
     
     return JSONScanValidationResponse(
         is_valid=is_valid,
@@ -63,7 +117,7 @@ async def validate_json_scan(req):
 
 
 @router.post("/scans/json/from-json")
-async def start_scan_from_json(req, app=None):
+async def start_scan_from_json(req: JSONScanRequest, app=None):
     """Start a scan from JSON instruction."""
     from datetime import datetime
     from dataclasses import dataclass, field
@@ -205,8 +259,39 @@ async def get_json_schema():
 
 # Main Scan Endpoints
 
+@router.post("/scan/validate")
+async def validate_scan(req: ScanRequest):
+    """Validate a scan configuration and return any warnings."""
+    warnings = []
+    
+    # Validate target
+    if not req.target or not req.target.strip():
+        raise HTTPException(status_code=400, detail="Target is required")
+    
+    target = req.target.strip()
+    
+    # Check for common target issues
+    if len(target) > 255:
+        warnings.append("Target is very long (>255 chars), may cause issues")
+    
+    # Warn if multiple scanning modes are enabled
+    scan_modes = sum([req.ports, req.web, req.cve, req.recon])
+    if scan_modes > 2:
+        warnings.append(f"Multiple scan modes enabled ({scan_modes}). This may take a long time.")
+    
+    # Warn if full_scan is enabled
+    if req.full_scan:
+        warnings.append("Full scan enabled. This may take a significant amount of time.")
+    
+    # Warn if port range is not top-1000 (slower scans)
+    if req.port_range not in ["top-1000", "top-100"]:
+        warnings.append(f"Non-standard port range: {req.port_range}. Scan may take longer.")
+    
+    return {"valid": True, "warnings": warnings}
+
+
 @router.post("/scan")
-async def start_scan(req):
+async def start_scan(req: ScanRequest):
     """Start a new vulnerability scan."""
     try:
         _gc_scans()
