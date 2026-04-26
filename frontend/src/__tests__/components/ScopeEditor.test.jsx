@@ -14,7 +14,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import ScopeEditor from '../ScopeEditor';
+import ScopeEditor from '../../../components/ScopeEditor';
 
 describe('ScopeEditor Component', () => {
   beforeEach(() => {
