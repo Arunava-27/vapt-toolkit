@@ -272,20 +272,20 @@ async def validate_scan(req: ScanRequest):
     
     # Check for common target issues
     if len(target) > 255:
-        warnings.append("Target is very long (>255 chars), may cause issues")
+        warnings.append({"level": "warning", "message": "Target is very long (>255 chars), may cause issues"})
     
     # Warn if multiple scanning modes are enabled
     scan_modes = sum([req.ports, req.web, req.cve, req.recon])
     if scan_modes > 2:
-        warnings.append(f"Multiple scan modes enabled ({scan_modes}). This may take a long time.")
+        warnings.append({"level": "warning", "message": f"Multiple scan modes enabled ({scan_modes}). This may take a long time."})
     
     # Warn if full_scan is enabled
     if req.full_scan:
-        warnings.append("Full scan enabled. This may take a significant amount of time.")
+        warnings.append({"level": "warning", "message": "Full scan enabled. This may take a significant amount of time."})
     
     # Warn if port range is not top-1000 (slower scans)
     if req.port_range not in ["top-1000", "top-100"]:
-        warnings.append(f"Non-standard port range: {req.port_range}. Scan may take longer.")
+        warnings.append({"level": "warning", "message": f"Non-standard port range: {req.port_range}. Scan may take longer."})
     
     return {"valid": True, "warnings": warnings}
 
