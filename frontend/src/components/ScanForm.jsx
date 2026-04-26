@@ -1,3 +1,4 @@
+import { useState } from "react";
 import WordlistPicker from "./WordlistPicker";
 
 const PORT_PRESETS = [
@@ -64,6 +65,7 @@ function Toggle({ label, sub, icon, active, onChange, disabled }) {
 }
 
 export default function ScanForm({ config, onChange, onScan, scanning }) {
+  const [expandAdvanced, setExpandAdvanced] = useState(false);
   const set = (patch) => onChange({ ...config, ...patch });
 
   const classification = config.scan_classification || "active";
@@ -224,70 +226,125 @@ export default function ScanForm({ config, onChange, onScan, scanning }) {
             <p className="setting-warn">⚠ Full port scan is very slow (~10 min).</p>
           )}
 
-          {/* Scan type */}
-          <label className="settings-label" style={{ marginTop: ".75rem" }}>Scan Type</label>
-          <div className="scan-type-grid">
-            {SCAN_TYPES.map((t) => (
-              <div key={t.value}
-                   className={`scan-type-opt${config.scan_type === t.value ? " active" : ""}`}
-                   onClick={() => !scanning && set({ scan_type: t.value })}>
-                <strong>{t.label}</strong>
-                <span>{t.desc}</span>
+          {/* Advanced Port Options - Collapsible */}
+          <div style={{
+            marginTop: "1rem",
+            borderTop: "1px solid var(--border)",
+            paddingTop: "1rem",
+          }}>
+            <button
+              onClick={() => setExpandAdvanced(!expandAdvanced)}
+              style={{
+                width: "100%",
+                padding: "0.75rem",
+                background: "var(--bg2)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => e.target.style.background = "var(--accent)"}
+              onMouseLeave={(e) => e.target.style.background = "var(--bg2)"}
+            >
+              <span>⚙️ Advanced Port Options</span>
+              <span style={{
+                transform: expandAdvanced ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s",
+                fontSize: "1.2rem",
+              }}>
+                ▼
+              </span>
+            </button>
+
+            {expandAdvanced && (
+              <div style={{
+                marginTop: "1rem",
+                padding: "1rem",
+                background: "var(--bg2)",
+                borderRadius: 4,
+                display: "flex",
+                flexDirection: "column",
+                gap: "1rem",
+              }}>
+                {/* Scan type */}
+                <div>
+                  <label className="settings-label">Scan Type</label>
+                  <div className="scan-type-grid">
+                    {SCAN_TYPES.map((t) => (
+                      <div key={t.value}
+                           className={`scan-type-opt${config.scan_type === t.value ? " active" : ""}`}
+                           onClick={() => !scanning && set({ scan_type: t.value })}>
+                        <strong>{t.label}</strong>
+                        <span>{t.desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {(config.scan_type === "syn" || config.scan_type === "syn_udp" || config.scan_type === "udp") && (
+                    <p className="setting-warn">⚠ Requires root / Administrator + Npcap on Windows.</p>
+                  )}
+                </div>
+
+                {/* Timing */}
+                <div>
+                  <label className="settings-label">
+                    Timing — T{config.port_timing ?? 4}
+                    <span className="timing-desc"> {["Paranoid","Sneaky","Polite","Normal","Aggressive","Insane"][config.port_timing ?? 4]}</span>
+                  </label>
+                  <input type="range" min="0" max="5" step="1"
+                    className="timing-slider"
+                    value={config.port_timing ?? 4}
+                    disabled={scanning}
+                    onChange={(e) => set({ port_timing: parseInt(e.target.value) })} />
+                  <div className="timing-labels">
+                    {["T0","T1","T2","T3","T4","T5"].map((t, i) => (
+                      <span key={t} className={config.port_timing === i ? "tl-active" : ""}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* NSE Scripts */}
+                <div>
+                  <label className="settings-label">NSE Scripts</label>
+                  <div className="script-pills">
+                    {SCRIPT_PRESETS.map((s) => (
+                      <button key={s.value}
+                        className={`preset-pill${config.port_script === s.value ? " active" : ""}${s.value === "vuln" ? " warn" : ""}`}
+                        disabled={scanning}
+                        onClick={() => set({ port_script: s.value })}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Toggles row */}
+                <div style={{ display: "flex", flexDirection: "column", gap: ".35rem" }}>
+                  <Toggle label="Version Detection" sub="-sV · adds ~1-2 min" icon="🔬"
+                    active={!!config.version_detect} disabled={scanning || config.scan_type === "aggressive"}
+                    onChange={(v) => set({ version_detect: v })} />
+                  <Toggle label="OS Detection" sub="-O · guesses OS" icon="🖥️"
+                    active={!!config.os_detect} disabled={scanning || config.scan_type === "aggressive"}
+                    onChange={(v) => set({ os_detect: v })} />
+                  <Toggle label="Skip Ping (-Pn)" sub="Treat host as up even if ICMP blocked" icon="🔇"
+                    active={!!config.skip_ping} disabled={scanning}
+                    onChange={(v) => set({ skip_ping: v })} />
+                </div>
+
+                {/* Extra flags */}
+                <div className="form-group">
+                  <label>Extra nmap flags</label>
+                  <input type="text" placeholder="e.g. --min-rate 1000 --ttl 64"
+                    value={config.port_extra_flags ?? ""} disabled={scanning}
+                    onChange={(e) => set({ port_extra_flags: e.target.value })} />
+                </div>
               </div>
-            ))}
-          </div>
-          {(config.scan_type === "syn" || config.scan_type === "syn_udp" || config.scan_type === "udp") && (
-            <p className="setting-warn">⚠ Requires root / Administrator + Npcap on Windows.</p>
-          )}
-
-          {/* Timing */}
-          <label className="settings-label" style={{ marginTop: ".75rem" }}>
-            Timing — T{config.port_timing ?? 4}
-            <span className="timing-desc"> {["Paranoid","Sneaky","Polite","Normal","Aggressive","Insane"][config.port_timing ?? 4]}</span>
-          </label>
-          <input type="range" min="0" max="5" step="1"
-            className="timing-slider"
-            value={config.port_timing ?? 4}
-            disabled={scanning}
-            onChange={(e) => set({ port_timing: parseInt(e.target.value) })} />
-          <div className="timing-labels">
-            {["T0","T1","T2","T3","T4","T5"].map((t, i) => (
-              <span key={t} className={config.port_timing === i ? "tl-active" : ""}>{t}</span>
-            ))}
-          </div>
-
-          {/* NSE Scripts */}
-          <label className="settings-label" style={{ marginTop: ".75rem" }}>NSE Scripts</label>
-          <div className="script-pills">
-            {SCRIPT_PRESETS.map((s) => (
-              <button key={s.value}
-                className={`preset-pill${config.port_script === s.value ? " active" : ""}${s.value === "vuln" ? " warn" : ""}`}
-                disabled={scanning}
-                onClick={() => set({ port_script: s.value })}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Toggles row */}
-          <div style={{ display: "flex", flexDirection: "column", gap: ".35rem", marginTop: ".5rem" }}>
-            <Toggle label="Version Detection" sub="-sV · adds ~1-2 min" icon="🔬"
-              active={!!config.version_detect} disabled={scanning || config.scan_type === "aggressive"}
-              onChange={(v) => set({ version_detect: v })} />
-            <Toggle label="OS Detection" sub="-O · guesses OS" icon="🖥️"
-              active={!!config.os_detect} disabled={scanning || config.scan_type === "aggressive"}
-              onChange={(v) => set({ os_detect: v })} />
-            <Toggle label="Skip Ping (-Pn)" sub="Treat host as up even if ICMP blocked" icon="🔇"
-              active={!!config.skip_ping} disabled={scanning}
-              onChange={(v) => set({ skip_ping: v })} />
-          </div>
-
-          {/* Extra flags */}
-          <div className="form-group" style={{ marginTop: ".5rem" }}>
-            <label>Extra nmap flags</label>
-            <input type="text" placeholder="e.g. --min-rate 1000 --ttl 64"
-              value={config.port_extra_flags ?? ""} disabled={scanning}
-              onChange={(e) => set({ port_extra_flags: e.target.value })} />
+            )}
           </div>
         </div>
       )}

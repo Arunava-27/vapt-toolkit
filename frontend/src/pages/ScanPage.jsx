@@ -67,7 +67,8 @@ export default function ScanPage() {
   const [pendingConfig, setPendingConfig] = useState(null);
   const [showScheduler, setShowScheduler] = useState(false);
   const [scanMode, setScanMode] = useState("wizard"); // "wizard", "form" or "json"
-  const [showWizard, setShowWizard] = useState(false);
+  const [showWizard, setShowWizard] = useState(true); // Start with wizard
+  const [expandAdvanced, setExpandAdvanced] = useState(false);
 
   const {
     scanning, canResume, log, results, moduleStatus,
@@ -199,66 +200,75 @@ export default function ScanPage() {
 
       <ResizableLayout sidebar={
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", height: "100%", overflowY: "auto" }}>
-          {/* Scan Mode Tabs */}
-          <div style={{
-            display: "flex",
-            gap: "0.5rem",
-            borderBottom: "2px solid var(--bg2)",
-            paddingBottom: "0.5rem",
-            flexWrap: "wrap",
-          }}>
+          {/* Main Scan Controls - Clean Card Layout */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {/* Wizard Button - Primary CTA */}
             <button
               onClick={() => { setScanMode("wizard"); setShowWizard(true); }}
               style={{
-                padding: "0.5rem 1rem",
-                background: "var(--accent)",
-                color: "var(--bg-primary)",
+                padding: "0.75rem 1.25rem",
+                background: "linear-gradient(135deg, var(--accent), #5b9fd6)",
+                color: "white",
                 border: "none",
-                borderRadius: 4,
+                borderRadius: 6,
                 cursor: "pointer",
-                fontSize: "0.9rem",
+                fontSize: "0.95rem",
                 fontWeight: "600",
                 transition: "all 0.2s",
+                boxShadow: "0 4px 12px rgba(91, 159, 214, 0.3)",
               }}
-              title="Quick guided scan"
+              onMouseEnter={(e) => e.target.style.transform = "translateY(-2px)"}
+              onMouseLeave={(e) => e.target.style.transform = "translateY(0)"}
+              title="Quick guided scan in 4 easy steps"
             >
               🧙 Smart Wizard
             </button>
-            <button
-              onClick={() => setScanMode("form")}
-              style={{
-                padding: "0.5rem 1rem",
-                background: scanMode === "form" ? "var(--accent)" : "transparent",
-                color: scanMode === "form" ? "var(--bg-primary)" : "var(--text)",
-                border: "none",
-                borderRadius: 4,
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                fontWeight: scanMode === "form" ? "600" : "400",
-                transition: "all 0.2s",
-              }}
-              title="Advanced form with all options"
-            >
-              📋 Advanced
-            </button>
-            <button
-              onClick={() => setScanMode("json")}
-              style={{
-                padding: "0.5rem 1rem",
-                background: scanMode === "json" ? "var(--accent)" : "transparent",
-                color: scanMode === "json" ? "var(--bg-primary)" : "var(--text)",
-                border: "none",
-                borderRadius: 4,
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                fontWeight: scanMode === "json" ? "600" : "400",
-                transition: "all 0.2s",
-              }}
-              title="JSON-based instructions for automation"
-            >
-              📝 JSON API
-            </button>
+
+            {/* Advanced & JSON Tabs */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "0.5rem",
+            }}>
+              <button
+                onClick={() => { setScanMode("form"); setShowWizard(false); }}
+                style={{
+                  padding: "0.6rem 1rem",
+                  background: scanMode === "form" ? "var(--accent)" : "var(--bg2)",
+                  color: scanMode === "form" ? "white" : "var(--text)",
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  fontWeight: scanMode === "form" ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+                title="Full control with all options"
+              >
+                📋 Advanced
+              </button>
+              <button
+                onClick={() => { setScanMode("json"); setShowWizard(false); }}
+                style={{
+                  padding: "0.6rem 1rem",
+                  background: scanMode === "json" ? "var(--accent)" : "var(--bg2)",
+                  color: scanMode === "json" ? "white" : "var(--text)",
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  fontWeight: scanMode === "json" ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+                title="JSON for automation"
+              >
+                📝 JSON
+              </button>
+            </div>
           </div>
+
+          {/* Divider */}
+          <div style={{ height: "1px", background: "var(--border)", opacity: 0.3 }} />
 
           {/* Clear Scans Button */}
           <button
@@ -268,7 +278,7 @@ export default function ScanPage() {
               }
             }}
             style={{
-              padding: "0.5rem 1rem",
+              padding: "0.6rem 1rem",
               background: "var(--bg2)",
               color: "var(--text)",
               border: "1px solid var(--border)",
@@ -277,7 +287,6 @@ export default function ScanPage() {
               fontSize: "0.85rem",
               fontWeight: "500",
               transition: "all 0.2s",
-              marginBottom: "0.5rem",
             }}
             title="Clear all scan results and start fresh"
           >

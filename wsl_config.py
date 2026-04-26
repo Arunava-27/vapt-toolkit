@@ -48,20 +48,23 @@ class WSLConfig:
         # Try WSL first (if running on Windows)
         if platform.system() == "Windows":
             try:
+                # Try to find nmap in default WSL (with longer timeout for WSL startup)
                 result = subprocess.run(
                     ["wsl.exe", "which", "nmap"],
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=15,  # Increased timeout for WSL startup
                 )
-                if result.returncode == 0:
+                wsl_path = result.stdout.strip() if result.returncode == 0 else None
+                
+                if result.returncode == 0 and result.stdout.strip():
                     path = result.stdout.strip()
-                    if path:
-                        return path
-            except Exception:
+                    # If found in WSL, return it (prioritize WSL)
+                    return path
+            except Exception as e:
                 pass
 
-        # Try Windows PATH
+        # Try Windows PATH (fallback if WSL not available)
         windows_nmap = shutil.which("nmap")
         if windows_nmap:
             return windows_nmap
@@ -74,20 +77,21 @@ class WSLConfig:
         # Try WSL first (if running on Windows)
         if platform.system() == "Windows":
             try:
+                # Try to find searchsploit in default WSL (with longer timeout for WSL startup)
                 result = subprocess.run(
                     ["wsl.exe", "which", "searchsploit"],
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=15,  # Increased timeout for WSL startup
                 )
-                if result.returncode == 0:
+                if result.returncode == 0 and result.stdout.strip():
                     path = result.stdout.strip()
-                    if path:
-                        return path
-            except Exception:
+                    # If found in WSL, return it (prioritize WSL)
+                    return path
+            except Exception as e:
                 pass
 
-        # Try Windows PATH
+        # Try Windows PATH (fallback if WSL not available)
         windows_ss = shutil.which("searchsploit")
         if windows_ss:
             return windows_ss

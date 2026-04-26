@@ -22,6 +22,7 @@ from database import (
 from scanner.api_auth import check_rate_limit
 from scanner.web.fp_pattern_database import FalsePositivePatternDB
 from scanner.scope_manager import get_scope_manager
+from wsl_config import wsl  # Import WSL config for tool status
 
 fp_pattern_db = FalsePositivePatternDB()
 from pathlib import Path
@@ -91,18 +92,45 @@ async def health():
 
 @router.get("/system/tools")
 async def system_tools():
-    """Get status of external tools (Nmap, SearchSploit)."""
-    from wsl_config import wsl
+    """Get status of external tools (Nmap, SearchSploit) and WSL integration."""
     return wsl.get_status()
+
+
+@router.get("/admin/wsl-status")
+async def wsl_status():
+    """Get detailed WSL integration status for diagnostics."""
+    status = wsl.get_status()
+    return {
+        "status": "ready" if status["nmap"]["available"] else "warning",
+        "details": status,
+        "message": "WSL tools available" if status["nmap"]["available"] 
+                   else "Nmap not found. Please install: sudo apt install nmap (WSL) or choco install nmap (Windows)"
+    }
 
 
 # --- Scan Validation ---
 
+class ScanValidationRequest(BaseModel):
+    """Request to validate scan parameters."""
+    target: str
+    recon: bool = False
+    ports: bool = False
+    web: bool = False
+    cve: bool = False
+    full_scan: bool = False
+    scan_classification: str = "active"
+    port_range: str = "top-1000"
+    port_timing: int = 4
+    port_script: str = ""
+    scan_type: str = "connect"
+    version_detect: bool = False
+    os_detect: bool = False
+    existing_ports: bool = False
+
+
 @router.post("/scan/validate")
-async def validate_scan(req):
+async def validate_scan(req: ScanValidationRequest):
     """Validate scan request against constraints."""
-    from server_original import ScanRequest
-    
     warnings = []
     target = req.target.lower().strip()
 

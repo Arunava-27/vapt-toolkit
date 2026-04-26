@@ -22,12 +22,12 @@ if (-not (Test-Path $venvPython)) {
     Write-Host ".venv found." -ForegroundColor Green
 }
 
-# Backend — activate venv then run server
+# Backend — activate venv then run server (use modular server/main.py, not old server.py)
 $backendCmd = "Set-Location '$root'; " +
     "Write-Host 'Activating venv...' -ForegroundColor Cyan; " +
     "& '$venvActivate'; " +
     "Write-Host 'Starting backend on http://localhost:8000  (Ctrl+C to stop)' -ForegroundColor Cyan; " +
-    "python server.py; " +
+    "python server\main.py; " +
     "Write-Host 'Backend stopped.' -ForegroundColor Yellow"
 Start-Process powershell -ArgumentList "-ExecutionPolicy", "Bypass", "-Command", $backendCmd
 
